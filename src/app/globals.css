@@ -1,0 +1,181 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+@font-face {
+  font-family: "JoseonGulim";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGu.woff") format("woff");
+  font-weight: normal;
+  font-display: swap;
+}
+
+@theme {
+  --color-bg: #141210;
+  --color-panel: #1c1a18;
+  --color-surface: #1f1c19;
+  --color-fg: #f2eee8;
+  --color-soft: #d8d2c9;
+  --color-muted: #c9c3ba;
+  --color-subtle: #9a948c;
+  --color-ink: #1a1816;
+  --color-accent: oklch(0.72 0.17 50);
+  --color-danger: oklch(0.75 0.15 28);
+  --color-danger-line: oklch(0.62 0.17 28);
+  --color-ok: oklch(0.78 0.14 150);
+  --color-income: oklch(0.8 0.12 150);
+  --color-line: rgb(255 255 255 / 0.07);
+
+  --font-sans: "JoseonGulim", Pretendard, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* 유틸리티가 덮어쓸 수 있도록 기본 스타일은 base 레이어에 둔다. */
+@layer base {
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    word-break: keep-all;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+/* 디자인 원본의 반복 패턴: 카드, 알약 버튼, 세그먼트, 입력, 스위치 */
+@layer components {
+  .card {
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 20px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-glass {
+    background: rgb(28 26 24 / 0.62);
+    backdrop-filter: blur(18px);
+  }
+  .card-flat {
+    background: rgb(255 255 255 / 0.035);
+  }
+  .card-warm {
+    background: linear-gradient(180deg, rgb(60 52 44 / 0.7), rgb(28 26 24 / 0.85));
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--color-fg);
+    background: transparent;
+    border: 1px solid rgb(255 255 255 / 0.18);
+    cursor: pointer;
+  }
+  .pill-glass {
+    background: rgb(28 26 24 / 0.62);
+    backdrop-filter: blur(18px);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+  .pill-accent {
+    background: var(--color-accent);
+    color: var(--color-ink);
+    font-weight: 700;
+    border-color: transparent;
+  }
+  .pill-danger {
+    border-color: var(--color-danger-line);
+    color: var(--color-danger);
+  }
+
+  .seg {
+    display: flex;
+    gap: 4px;
+    background: rgb(255 255 255 / 0.06);
+    border-radius: 999px;
+    padding: 4px;
+    font-size: 13px;
+  }
+  .seg-item {
+    border: none;
+    border-radius: 999px;
+    padding: 7px 14px;
+    background: transparent;
+    color: var(--color-muted);
+    font: 500 13px var(--font-sans);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .seg-item[aria-pressed="true"] {
+    background: var(--color-fg);
+    color: var(--color-ink);
+    font-weight: 700;
+  }
+  .seg-item:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .field {
+    width: 100%;
+    background: rgb(255 255 255 / 0.06);
+    border: 1px solid rgb(255 255 255 / 0.12);
+    border-radius: 12px;
+    padding: 11px 14px;
+    color: var(--color-fg);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    color-scheme: dark;
+  }
+  .field:focus {
+    border-color: var(--color-accent);
+  }
+
+  .switch {
+    position: relative;
+    flex: none;
+    width: 44px;
+    height: 26px;
+    border-radius: 13px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: rgb(255 255 255 / 0.18);
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-fg);
+    transition: left 0.15s;
+  }
+  .switch[aria-checked="true"] {
+    background: var(--color-accent);
+  }
+  .switch[aria-checked="true"]::after {
+    left: 21px;
+  }
+
+  .bar-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgb(255 255 255 / 0.12);
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--color-accent);
+  }
+}
