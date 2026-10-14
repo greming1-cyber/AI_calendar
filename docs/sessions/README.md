@@ -3,7 +3,7 @@
 라이프 매니저를 Claude Code 세션 여러 개로 나눠 동시에 개발하기 위한 안내서다. 세션마다 자기 문서(`00`~`06`)를 읽고, 이 README의 공통 규칙을 따른다.
 
 - 요구사항 기준: [`PRD.md`](../../PRD.md) (요구사항 ID), [`Sitemap.md`](../../Sitemap.md) (메뉴 번호)
-- 현재 상태: 디자인 시안을 옮긴 Next.js 16 화면이 예시 데이터(`src/lib/mock-data.ts`, `src/lib/store.tsx`)로 동작한다. Supabase·인증·외부 연동은 없다.
+- 현재 상태: 00(기반)이 끝나면 로그인과 Supabase 실데이터로 동작한다. 일정·할일·가계부는 DB에서 읽고, 날씨·구글·MCP만 `src/lib/mock-data.ts` 예시로 남아 있다. 구조는 `CLAUDE.md`의 "현재 상태"를 본다.
 
 ---
 
@@ -39,24 +39,24 @@
 
 ## 3. 작업 환경 준비 (세션마다)
 
-모든 세션은 **자기 git worktree**에서 작업한다. 같은 폴더를 여러 세션이 함께 쓰지 않는다.
+모든 세션은 **자기 git worktree**에서 작업한다. 같은 폴더를 여러 세션이 함께 쓰지 않는다. worktree는 Claude Code의 **EnterWorktree**로 만들고, 위치는 저장소 안의 `.claude/worktrees/<세션>`이다(`.gitignore`에 들어 있다).
 
-```powershell
-# main 작업 폴더(D:\ChaAI\06_calendar)에서, 00이 main에 병합된 뒤
-git pull
-git worktree add D:\ChaAI-wt\calendar -b feat/calendar   # 세션별로 이름만 바꿔서
-cd D:\ChaAI-wt\calendar
-npm install
-Copy-Item D:\ChaAI\06_calendar\.env.local .               # 00이 만든 환경변수 파일
-npm run dev -- -p 3001                                    # 표의 개발 포트 사용
-```
+1. main 작업 폴더(`D:\ChaAI\06_calendar`)에서 00이 main에 병합된 것을 확인한 뒤 Claude Code 세션을 시작한다.
+2. 세션에서 EnterWorktree로 자기 worktree를 만들고 브랜치를 표의 이름으로 맞춘다(예: worktree `calendar`, 브랜치 `feat/calendar`).
+3. worktree 안에서 준비한다.
+   ```powershell
+   npm install
+   Copy-Item D:\ChaAI\06_calendar\.env.local .     # 00이 만든 환경변수 파일(커밋하지 않음)
+   npm run dev -- -p 3001                          # 표의 개발 포트 사용
+   ```
+4. 문서 끝의 **세션 시작 프롬프트**로 작업을 시작한다.
 
-- worktree는 `D:\ChaAI-wt\<세션>`에 만든다. `D:\ChaAI` 아래에 만들면 상위 저장소에 잡힌다.
-- 새 Claude Code 세션은 그 worktree 폴더에서 시작하고, 각 문서 끝의 **세션 시작 프롬프트**를 붙여 넣는다.
-- 00 세션만 예외로 main 작업 폴더에서 `feat/foundation` 브랜치를 만들어 진행해도 된다.
-
+- 직접 만들 때는 `git worktree add .claude/worktrees/calendar -b feat/calendar`로 같은 위치에 만든다.
+- 00 세션만 예외로 main 작업 폴더에서 `feat/foundation` 브랜치를 만들어 진행한다.
+- 같은 폴더를 여러 세션이 읽는 동안에는 `git stash`, `git reset`, `git checkout -- .`, `git clean`처럼 작업 트리 전체를 건드리는 명령을 쓰지 않는다.
+- `npm run dev`는 `AGENTS.md` 끝에 Next.js 안내 블록을 자동으로 넣는다. 생긴 변경은 지우지 말고 그대로 둔다.
 ### 테스트 계정
-Supabase 클라우드 프로젝트 하나를 모든 세션이 같이 쓴다. 데이터가 섞이지 않도록 **세션마다 자기 테스트 계정**으로 로그인한다. 예: `dev+calendar@…`, `dev+todos@…`. 가입 직후 00이 만든 데모 데이터 채우기 기능으로 예시 데이터를 넣을 수 있다.
+Supabase 클라우드 프로젝트 하나를 모든 세션이 같이 쓴다. 데이터가 섞이지 않도록 **세션마다 자기 테스트 계정**으로 로그인한다. 예: `dev+calendar@…`, `dev+todos@…`. 가입 후 설정 → 내 정보 → "예시 데이터 채우기"(DB 함수 `seed_demo`)로 시안과 같은 예시 데이터를 넣을 수 있다. 그 계정의 일정·할일·가계부 데이터를 지우고 다시 넣는다.
 
 ## 4. 파일 소유 규칙
 
@@ -64,16 +64,18 @@ Supabase 클라우드 프로젝트 하나를 모든 세션이 같이 쓴다. 데
 
 | 영역 | 소유 세션 |
 |---|---|
-| `supabase/migrations/0001_*`, `src/lib/supabase/**`, `src/proxy.ts`, `src/app/(auth)/**`, `tsconfig.json`, `eslint.config.mjs`, `next.config.ts`, `package.json`의 공용 의존성 | 00 |
-| `src/app/globals.css`, `src/components/ui/**`, `src/components/shell/**`, `src/app/layout.tsx` | 00 → 웨이브 3에서 06 |
+| `supabase/config.toml`, `supabase/migrations/0001_*`, `src/lib/supabase/**`, `src/proxy.ts`, `src/app/(auth)/**`, `src/app/providers.tsx`, `tsconfig.json`, `eslint.config.mjs`, `next.config.ts`, `package.json`의 공용 의존성, `.env.example` | 00 |
+| `src/lib/types/common.ts`·`index.ts`, `src/lib/data/profile.ts`, `src/lib/hooks/use-profile.ts`·`use-today.ts`, `src/components/settings/ProfileTab.tsx`·`ToggleList.tsx` | 00 |
+| `src/app/globals.css`, `src/components/ui/**`, `src/components/shell/**`, `src/app/layout.tsx`, `src/components/settings/SettingsView.tsx`(탭 목록) | 00 → 웨이브 3에서 06 |
 | `src/lib/date.ts`, `src/lib/format.ts` | 00 (함수 추가는 각 세션 허용, 기존 시그니처 변경 금지) |
-| 일정 화면·데이터 (`components/calendar`, `lib/data/events.ts` 등) | 01 |
-| 할일 화면·데이터 (`components/todos`, `lib/data/todos.ts` 등) | 02 |
-| 가계부 화면·데이터 (`components/money`, `lib/data/transactions.ts` 등) | 03 |
-| `supabase/functions/{gcal-sync,weather}`, 설정 구글·날씨 탭 | 04 |
-| `supabase/functions/mcp-api`, `mcp/**`, 설정 MCP 탭 | 05 |
-| `components/home`, 검색, 설정 일반 탭, 알림, `mock-data.ts`·`store.tsx` 제거 | 06 |
+| 일정: `components/calendar/**`, `app/calendar/**`, `lib/data/events.ts`, `lib/hooks/use-events.ts`, `lib/types/events.ts` | 01 |
+| 할일: `components/todos/**`, `app/todos/**`, `lib/data/todos.ts`, `lib/hooks/use-todos.ts`, `lib/types/todos.ts`, `lib/todo.ts` | 02 |
+| 가계부: `components/money/**`, `app/money/**`, `lib/data/transactions.ts`·`budgets.ts`, `lib/hooks/use-transactions.ts`, `lib/types/money.ts`, `lib/money.ts` | 03 |
+| `supabase/functions/{gcal-sync,weather}`, `components/settings/GoogleTab.tsx`·`WeatherTab.tsx` | 04 |
+| `supabase/functions/mcp-api`, `mcp/**`, `components/settings/McpTab.tsx` | 05 |
+| `components/home/**`, 검색, `components/settings/NotificationsTab.tsx`, 알림, `mock-data.ts` 제거 | 06 |
 
+`lib/todo.ts`·`lib/money.ts`는 홈(06)도 쓴다. 06은 함수 추가만 하고 기존 시그니처는 바꾸지 않는다.
 다른 세션의 파일을 고쳐야 하면 직접 고치지 말고 다음 순서로 처리한다.
 1. 자기 문서 맨 아래 **요청 사항** 칸에 무엇이 왜 필요한지 적는다.
 2. 해당 세션에 알린다. 다른 세션 이름은 `/list-agents`(또는 `ListAgents`)로 확인하고 `SendMessage`로 보낸다.
@@ -103,7 +105,7 @@ Supabase 클라우드 프로젝트 하나를 모든 세션이 같이 쓴다. 데
   - 자기 문서의 **완료 기준** 체크리스트 모두 충족
 - 병합 직전에 `git merge main`으로 최신 main을 받아 충돌을 자기 브랜치에서 해결한 뒤 main에 병합한다.
 - 이 저장소는 자동 push가 없다. 병합 후 `git push`는 사람이 결정한다.
-- 병합이 끝난 worktree는 정리한다: `git worktree remove D:\ChaAI-wt\<세션>`
+- 병합이 끝난 worktree는 정리한다: ExitWorktree, 또는 `git worktree remove .claude/worktrees/<세션>`
 
 ## 7. 공통 개발 규칙
 

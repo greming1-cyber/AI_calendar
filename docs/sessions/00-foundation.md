@@ -31,7 +31,7 @@
 
 ## 3. 작업 환경
 
-- main 작업 폴더 `D:\ChaAI\06_calendar`에서 `git switch -c feat/foundation`
+- main 작업 폴더 `D:\ChaAI\06_calendar`에서 `git switch -c feat/foundation` (00만 worktree 없이 진행)
 - 개발 서버: `npm run dev` (포트 3000)
 
 ## 4. 소유 파일
@@ -52,22 +52,22 @@
 ## 5. 작업 상세
 
 ### 5.1 패키지와 환경변수
-- [ ] `npm i @supabase/supabase-js @supabase/ssr @tanstack/react-query`
-- [ ] `npm i -D supabase`를 설치한 뒤 `npx supabase init`, `npx supabase link --project-ref <ref>`
-- [ ] `.env.example` 작성. 실제 값은 `.env.local`에만 넣고 커밋하지 않는다.
+- [x] `npm i @supabase/supabase-js @supabase/ssr @tanstack/react-query`
+- [x] `npm i -D supabase`를 설치한 뒤 `npx supabase init`, `npx supabase link --project-ref <ref>` — link는 Supabase 프로젝트 생성 후(키 대기)
+- [x] `.env.example` 작성. 실제 값은 `.env.local`에만 넣고 커밋하지 않는다.
   ```
   NEXT_PUBLIC_SUPABASE_URL=
   NEXT_PUBLIC_SUPABASE_ANON_KEY=
   SUPABASE_SERVICE_ROLE_KEY=      # 서버 전용, 클라이언트 코드에서 import 금지
   ```
-- [ ] `tsconfig.json`의 `exclude`에 `supabase/functions`, `mcp`를 추가한다. 둘 다 Deno·별도 패키지라 Next 타입 검사에서 깨진다. `eslint.config.mjs`의 ignore에도 같은 경로를 추가한다.
+- [x] `tsconfig.json`의 `exclude`에 `supabase/functions`, `mcp`를 추가한다. 둘 다 Deno·별도 패키지라 Next 타입 검사에서 깨진다. `eslint.config.mjs`의 ignore에도 같은 경로를 추가한다.
 
 ### 5.2 스키마 — `supabase/migrations/0001_init.sql`
 PRD 4.3의 **모든 테이블**을 한 번에 만든다. 웨이브 2가 스키마를 바꾸지 않아도 되게 하는 것이 목표다.
-- [ ] 공통 컬럼과 트리거
+- [x] 공통 컬럼과 트리거
   - 공통 컬럼: `id uuid default gen_random_uuid()`, `user_id uuid references auth.users on delete cascade`, `created_at`, `updated_at`
   - `updated_at` 자동 갱신 트리거
-- [ ] 테이블
+- [x] 테이블
   - 프로필·일정: `profiles`, `event_categories`, `events`
   - 할일: `projects`, `todos`
   - 가계부: `tx_categories`, `payment_methods`, `transactions`, `recurring_transactions`, `budgets`
@@ -75,69 +75,69 @@ PRD 4.3의 **모든 테이블**을 한 번에 만든다. 웨이브 2가 스키�
   - 날씨: `weather_cache`
   - MCP: `mcp_tokens`, `mcp_audit_logs`
   - 알림: `notifications`
-- [ ] 컬럼 규칙: 금액은 `bigint`, 일시는 `timestamptz`, 날짜는 `date`, 반복은 `rrule text`, 열거형은 `check` 제약
-- [ ] `events`: `source in ('local','google')`, `(user_id, google_event_id)` 유니크, `deleted_at` 소프트 삭제
-- [ ] `todos`: `parent_id`(서브태스크), `event_id`(일정 연결), `rrule`
-- [ ] `transactions`: `via_mcp boolean` 추가. 화면의 "· Claude" 표시에 쓴다.
-- [ ] 인덱스: `events(user_id, start_at)`, `todos(user_id, due_date)`, `transactions(user_id, occurred_on)`
-- [ ] **RLS**: 사용자 테이블 전부에 `user_id = auth.uid()` 정책을 select/insert/update/delete별로 만든다.
+- [x] 컬럼 규칙: 금액은 `bigint`, 일시는 `timestamptz`, 날짜는 `date`, 반복은 `rrule text`, 열거형은 `check` 제약
+- [x] `events`: `source in ('local','google')`, `(user_id, google_event_id)` 유니크, `deleted_at` 소프트 삭제
+- [x] `todos`: `parent_id`(서브태스크), `event_id`(일정 연결), `rrule`
+- [x] `transactions`: `via_mcp boolean` 추가. 화면의 "· Claude" 표시에 쓴다.
+- [x] 인덱스: `events(user_id, start_at)`, `todos(user_id, due_date)`, `transactions(user_id, occurred_on)`
+- [x] **RLS**: 사용자 테이블 전부에 `user_id = auth.uid()` 정책을 select/insert/update/delete별로 만든다.
   - `weather_cache`는 사용자 정책 없이 service role 전용으로 둔다.
   - `google_accounts.refresh_token`은 클라이언트에서 조회하지 못하게 한다. Vault로 옮기거나, 해당 컬럼을 제외한 view를 쓰거나, 컬럼 권한을 회수한다.
-- [ ] 회원가입 트리거 `handle_new_user()`: `profiles`를 만들고 기본 데이터를 넣는다.
+- [x] 회원가입 트리거 `handle_new_user()`: `profiles`를 만들고 기본 데이터를 넣는다.
   - 기본 일정 카테고리: 업무·개인·가족·운동
   - 기본 가계부 분류: 식비·카페·교통·주거·통신·쇼핑·의료·문화·경조사·기타 / 급여·부수입·기타
   - 기본 결제수단: 현금·카드·계좌
   - 기본 프로젝트: 업무·개인·가족
-- [ ] 데모 데이터 함수 `seed_demo(uid uuid)`: 현재 `src/lib/mock-data.ts`의 일정·할일·거래·예산을 그 사용자에게 넣는다. 날짜는 실행일 기준으로 옮긴다. 세션마다 테스트 계정을 채울 때 쓴다.
-- [ ] `npx supabase db push`로 적용한 뒤 타입을 생성한다: `npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts`
+- [x] 데모 데이터 함수 `seed_demo(uid uuid)`: 현재 `src/lib/mock-data.ts`의 일정·할일·거래·예산을 그 사용자에게 넣는다. 날짜는 실행일 기준으로 옮긴다. 세션마다 테스트 계정을 채울 때 쓴다.
+- [ ] (키 대기) `npx supabase db push`로 적용한 뒤 타입을 생성한다. 지금 `database.types.ts`는 마이그레이션을 PGlite에 적용해 만든 임시본이다: `npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts`
 
 ### 5.3 Supabase 클라이언트와 인증
-- [ ] `src/lib/supabase/client.ts`(브라우저)와 `server.ts`(서버 컴포넌트·라우트 핸들러)를 `@supabase/ssr` 방식으로 만든다.
-- [ ] `src/proxy.ts`: 요청마다 세션을 갱신하고, 미로그인 사용자를 `/login`으로 보낸다.
+- [x] `src/lib/supabase/client.ts`(브라우저)와 `server.ts`(서버 컴포넌트·라우트 핸들러)를 `@supabase/ssr` 방식으로 만든다.
+- [x] `src/proxy.ts`: 요청마다 세션을 갱신하고, 미로그인 사용자를 `/login`으로 보낸다.
   - Next 16은 `middleware`가 `proxy`로 바뀌었으니 `node_modules/next/dist/docs`에서 확인한다.
-- [ ] `src/app/(auth)/`에 만들 것
+- [x] `src/app/(auth)/`에 만들 것
   - 화면: `login`, `signup`, `reset-password`, `update-password`
   - 라우트: `auth/callback`
   - 디자인은 기존 카드·필드·알약 버튼 클래스를 쓴다.
-- [ ] 구글 로그인 버튼(Supabase OAuth). 캘린더 권한은 요청하지 않는다(04 담당).
-- [ ] 로그아웃: 헤더 프로필을 누르면 메뉴가 열린다. 헤더의 이름은 실제 `profiles.name`으로 바꾼다.
-- [ ] `cacheComponents` 환경에서 쿠키를 읽는 서버 코드는 `Suspense` 경계가 필요하다. 문서를 확인하고 레이아웃 구조를 정리한다.
+- [x] 구글 로그인 버튼(Supabase OAuth). 캘린더 권한은 요청하지 않는다(04 담당).
+- [x] 로그아웃: 헤더 프로필을 누르면 메뉴가 열린다. 헤더의 이름은 실제 `profiles.name`으로 바꾼다.
+- [x] `cacheComponents` 환경에서 쿠키를 읽는 서버 코드는 `Suspense` 경계가 필요하다. 문서를 확인하고 레이아웃 구조를 정리한다.
 
 ### 5.4 데이터 계층 패턴
 웨이브 2가 따라 할 기준 구현이다.
-- [ ] `src/lib/types/`: 현재 `src/lib/types.ts`를 도메인별 파일로 나눈다.
+- [x] `src/lib/types/`: 현재 `src/lib/types.ts`를 도메인별 파일로 나눈다.
   - `events.ts`, `todos.ts`, `money.ts`, `common.ts`
   - 기존 `@/lib/types` 경로는 `index.ts`가 다시 내보내게 해서 깨지지 않게 한다.
-- [ ] `src/lib/data/<domain>.ts`: Supabase 쿼리 함수
+- [x] `src/lib/data/<domain>.ts`: Supabase 쿼리 함수
   - DB 행 ↔ 화면 타입 변환(`toEvent(row)` 등)을 여기에 둔다.
   - **조회 함수만** 만든다: `listEvents(from, to)`, `listEventCategories()`, `listTodos()`, `listProjects()`, `listTransactions(from, to)`, `listBudgets(month)`, `listTxCategories()`, `listPaymentMethods()`
-- [ ] `src/lib/hooks/use-<domain>.ts`: TanStack Query 훅
+- [x] `src/lib/hooks/use-<domain>.ts`: TanStack Query 훅
   - `useEvents(range)`, `useTodos(filter?)`, `useTransactions(range)` 등
   - 쿼리 키 규칙: `['events', from, to]`처럼 도메인명을 첫 원소로 한다.
-- [ ] `src/app/providers.tsx`에 `QueryClientProvider`를 두고 `layout.tsx`에서 감싼다.
-- [ ] 오늘 날짜: `TODAY` 상수 대신 `useToday()` 훅을 만든다(사용자 타임존 기준 `YYYY-MM-DD`).
-- [ ] 기존 화면(홈·캘린더·할일·가계부)이 `useStore()` 대신 새 훅으로 **읽기**를 하도록 바꾼다.
+- [x] `src/app/providers.tsx`에 `QueryClientProvider`를 두고 `layout.tsx`에서 감싼다.
+- [x] 오늘 날짜: `TODAY` 상수 대신 `useToday()` 훅을 만든다(사용자 타임존 기준 `YYYY-MM-DD`).
+- [x] 기존 화면(홈·캘린더·할일·가계부)이 `useStore()` 대신 새 훅으로 **읽기**를 하도록 바꾼다.
   - 쓰기 동작(일정 저장, 할일 완료)은 각 데이터 파일에 `// TODO(01/02)` 주석과 함께 최소 구현만 둔다.
   - 일정 저장·삭제, 할일 완료 토글은 화면이 계속 동작하도록 간단한 insert/update로 연결해 둔다.
-- [ ] `src/lib/store.tsx`의 사용처를 모두 없앤다. `mock-data.ts`에는 아직 실데이터가 없는 날씨·구글·MCP 예시만 남긴다(04·05·06이 제거).
+- [x] `src/lib/store.tsx`의 사용처를 모두 없앤다. `mock-data.ts`에는 아직 실데이터가 없는 날씨·구글·MCP 예시만 남긴다(04·05·06이 제거).
 
 ### 5.5 공용 UI와 파일 분리
-- [ ] `src/components/ui.tsx`를 `src/components/ui/` 폴더로 옮긴다.
+- [x] `src/components/ui.tsx`를 `src/components/ui/` 폴더로 옮긴다.
   - `card-head.tsx`, `progress-bar.tsx`, `switch.tsx`, `segmented.tsx`, `index.ts`
   - 기존 import 경로 `@/components/ui`는 그대로 동작하게 한다.
-- [ ] **모달 셸** `ui/modal.tsx`: `EventModal`의 바깥(배경, Esc로 닫기, 포커스, 제목)을 떼어 공용으로 만든다. 01·02·03이 등록 모달을 만들 때 쓴다.
-- [ ] **토스트** `ui/toast.tsx`: 저장·삭제·오류 알림. `useToast()`
-- [ ] 설정 화면을 탭별 파일로 나눈다. 웨이브 2가 같은 파일을 동시에 고치지 않게 하기 위해서다.
+- [x] **모달 셸** `ui/modal.tsx`: `EventModal`의 바깥(배경, Esc로 닫기, 포커스, 제목)을 떼어 공용으로 만든다. 01·02·03이 등록 모달을 만들 때 쓴다.
+- [x] **토스트** `ui/toast.tsx`: 저장·삭제·오류 알림. `useToast()`
+- [x] 설정 화면을 탭별 파일로 나눈다. 웨이브 2가 같은 파일을 동시에 고치지 않게 하기 위해서다.
   - `SettingsView.tsx`(탭 목록만)
   - `ProfileTab.tsx`(00), `NotificationsTab.tsx`(06), `GoogleTab.tsx`(04), `WeatherTab.tsx`(04), `McpTab.tsx`(05)
   - Sitemap 6.1의 "내 정보" 탭을 추가한다.
-- [ ] `ProfileTab`: 이름 수정, 이메일 표시, 비밀번호 변경, 회원 탈퇴(AUTH-05: 확인 입력 후 삭제. 서버에서 service role로 `auth.admin.deleteUser`)
+- [x] `ProfileTab`: 이름 수정, 이메일 표시, 비밀번호 변경, 회원 탈퇴(AUTH-05: 확인 입력 후 삭제. 서버에서 service role로 `auth.admin.deleteUser`)
 
 ### 5.6 문서
-- [ ] `CLAUDE.md`·`AGENTS.md`에 반영할 내용
+- [x] `CLAUDE.md`·`AGENTS.md`에 반영할 내용
   - 데이터 계층 구조, 환경변수, Supabase 명령(`db push`, `gen types`, `functions deploy`)
   - 테스트 계정·`seed_demo` 사용법
-- [ ] README의 파일 소유 표와 실제 경로가 다르면 README를 고친다.
+- [x] README의 파일 소유 표와 실제 경로가 다르면 README를 고친다.
 
 ## 6. 다른 세션과의 계약
 
@@ -157,9 +157,9 @@ PRD 4.3의 **모든 테이블**을 한 번에 만든다. 웨이브 2가 스키�
 - [ ] 다른 계정으로 로그인하면 앞 계정의 데이터가 보이지 않는다(RLS 확인).
 - [ ] 로그아웃 후 `/`에 접근하면 `/login`으로 이동한다.
 - [ ] 캘린더에서 일정 추가·수정·삭제, 할일 완료 토글이 새로고침 후에도 유지된다.
-- [ ] `store.tsx`를 import하는 곳이 없다.
-- [ ] `npm run build`, `npm run lint`를 통과한다.
-- [ ] README 4절의 소유 경로가 실제 파일 구조와 일치한다.
+- [x] `store.tsx`를 import하는 곳이 없다.
+- [x] `npm run build`, `npm run lint`를 통과한다.
+- [x] README 4절의 소유 경로가 실제 파일 구조와 일치한다.
 
 ## 8. 세션 시작 프롬프트
 
