@@ -45,7 +45,7 @@ M0 단계: Claude Design 시안(`Life Manager App.dc.html`)을 옮긴 화면이 
 | M3 | `mcp-api` Edge Function, MCP 서버, 토큰 관리 화면 |
 | M4 | P1 전체 |
 
-앞 단계가 끝나지 않았는데 뒤 단계 기능을 먼저 만들지 않는다.
+여러 세션이 나눠 개발할 때는 이 순서 대신 `docs/sessions/README.md`의 웨이브 순서(00 기반 → 01~05 병렬 → 06 통합)를 따른다. 작업을 시작하기 전에 README와 자기 세션 문서(`docs/sessions/0N-*.md`)를 읽고, 그 문서의 소유 파일만 수정한다.
 
 ## 아키텍처
 
@@ -85,3 +85,13 @@ MCP 서버 (로컬 stdio) ──(PAT)──> Edge Function mcp-api      └─> 
 ## 작성 규칙
 
 - 문서, UI 문구, 사용자 안내는 한국어로 작성한다. 코드 식별자와 테이블·컬럼명은 영어 snake_case(DB)·camelCase(TS)를 쓴다.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

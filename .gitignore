@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 병렬 세션용 git worktree (Claude Code EnterWorktree)
+.claude/worktrees/
