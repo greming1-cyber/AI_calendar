@@ -19,6 +19,9 @@ export const addDays = (iso: ISODate, n: number): ISODate => {
   return fromDate(dt);
 };
 
+/** b - a (일) */
+export const diffDays = (a: ISODate, b: ISODate) => Math.round((toDate(b).getTime() - toDate(a).getTime()) / 86_400_000);
+
 export const parts = (iso: ISODate) => {
   const dt = toDate(iso);
   return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate(), dow: dt.getUTCDay() };
