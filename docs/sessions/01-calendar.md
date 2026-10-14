@@ -101,6 +101,36 @@ npm run dev -- -p 3001
 
 - 구글 출처 일정의 `google_event_id`·`google_etag`는 01이 수정하지 않는다. 04가 관리한다.
 
+### 6.1 `src/lib/rrule.ts` (02·05 재사용)
+
+외부 import가 없는 순수 TS다. 웹 앱과 Edge Function(Deno)이 같은 파일을 쓴다. 날짜는 사용자 타임존 기준 `YYYY-MM-DD`이고, `rrule`은 DB `events.rrule`처럼 `RRULE:` 접두어가 없는 본문이다(접두어가 있어도 받는다).
+
+| 함수 | 용도 |
+|---|---|
+| `expandRRule(rrule, dtstart, exdates, from, to, opts?)` → `ISODate[]` | `[from, to]`(양 끝 포함) 범위의 회차. `exdates`(= `events.exdates`)는 결과에서 빼지만 COUNT에는 센다 |
+| `nextOccurrence(rrule, dtstart, from, exdates = [], opts?)` → `ISODate \| null` | `from`(포함) 이후 첫 회차 |
+| `todoNextDue(rrule, after)` → `ISODate \| null` | 할일 다음 회차. DB `todo_next_due(rrule, after)`(02)와 같은 결과. 해석할 수 없으면 `null` |
+| `isOccurrence(rrule, dtstart, date, exdates?, opts?)` → `boolean` | 그 날짜가 회차인지 |
+| `splitRRule(rrule, dtstart, splitDate, { tz?, allDay? })` → `{ before, after }` | "이후 모두" 수정용. COUNT는 나눠 갖고, 그 밖에는 `before`에 `UNTIL=전날`을 건다. `before=null`이면 이전 회차가 없고, `after=null`이면 남은 회차가 없다 |
+| `describeRRule(rrule, dtstart?, { tz? })` → `string` | 화면용 설명. 예: "매주 화·목", "2주마다 월요일 · 10회", "매월 마지막 금요일 · 2026년 12월 31일까지" |
+| `parseRRule(s)` → `RRule`, `buildRRule(rule)` → `string` | 파싱·직렬화 |
+| `untilValue(date, { tz?, allDay? })` → `string` | 그날까지 포함하는 UNTIL 값. 종일은 `YYYYMMDD`, 시간 일정은 그날 23:59:59의 UTC 일시 |
+| `RRuleError` | 형식 오류나 지원하지 않는 규칙 |
+
+`opts`(`ExpandOptions`): `tz`(기본 `Asia/Seoul`), `time`(`HH:mm`, UNTIL 당일 포함 판단), `spanDays`(여러 날 일정이 범위에 걸치는 회차 포함), `monthEnd`(`'skip'` | `'clamp'`), `ignoreCount`, `untilDateOnly`. 할일용 프리셋은 `TODO_RULE_OPTIONS = { monthEnd: 'clamp', ignoreCount: true, untilDateOnly: true }`이다.
+
+지원 범위: FREQ(DAILY/WEEKLY/MONTHLY/YEARLY), INTERVAL, COUNT, UNTIL, BYDAY(MONTHLY와 BYMONTH가 있는 YEARLY에서는 서수 허용), BYMONTHDAY, BYMONTH, WKST(기본 MO). DTSTART는 규칙과 맞지 않아도 첫 회차로 센다.
+
+DB `todo_next_due`와 다른 점(cal-main 승인):
+1. 일정의 기본 `monthEnd`는 `'skip'`이다. RFC 5545와 구글 캘린더처럼 31일·2월 29일이 없는 달은 건너뛴다. 말일 보정(`'clamp'`)은 할일에만 쓴다.
+2. 할일 모드에서도 서수 BYDAY(`2TU`)와 BYMONTH를 해석한다. DB는 서수를 떼고 BYMONTH를 무시한다. 그래서 02의 할일 등록 화면은 DB가 지원하는 규칙만 만든다.
+3. 지원하지 않는 규칙(BYSETPOS, HOURLY 등)이 오면 `RRuleError`를 던진다. `todoNextDue`만 DB처럼 `null`을 돌려준다.
+
+### 6.2 PRD와 달라지는 점
+
+- 캘린더 UI: PRD 4.2 기술 스택의 FullCalendar 대신 월·주·일 보기를 직접 구현한다. 다크 테마 토큰과 360px 폭에 맞추고 의존성을 줄이기 위해서다(cal-main 승인).
+- RRULE: 라이브러리 없이 `src/lib/rrule.ts`로 직접 처리한다. EXDATE는 rrule 문자열에 넣지 않고 `events.exdates date[]`에 저장한다. 예외 일정은 `recurrence_parent_id`와 `original_date`(대체하는 원래 회차 날짜)를 가진다.
+
 ## 7. 완료 기준
 
 - [ ] 일정 등록·수정·삭제가 새로고침 후에도 유지되고, 다른 계정에는 보이지 않는다.
