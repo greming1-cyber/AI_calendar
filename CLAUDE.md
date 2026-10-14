@@ -49,9 +49,9 @@ M0 단계: Claude Design 시안(`Life Manager App.dc.html`)을 옮긴 화면이 
 
 ## 저장소 환경
 
-- git 루트는 상위 폴더 `D:\ChaAI`이고, 다른 프로젝트(`02_1page`, `03_blog` 등)와 같은 저장소를 쓴다. 원격: `github.com/greming1-cyber/cal`.
-- `core.hooksPath=.githooks`로 설정된 **post-commit 훅이 커밋 직후 자동으로 `git push`** 한다. 커밋은 곧 원격 반영이므로 커밋 전에 내용을 확인한다.
-- 루트 `vercel.json`은 정적 사이트용(`framework: null`, `/` → `02_1page/index.html`)이다. 이 프로젝트를 Next.js로 배포하려면 루트 설정을 건드리지 말고 Root Directory를 `06_calendar`로 지정한 별도 Vercel 프로젝트를 쓴다.
+- 이 폴더는 **독립 git 저장소**다(원격 `github.com/greming1-cyber/AI_calendar`, 브랜치 `main`). 상위 `D:\ChaAI` 저장소는 `.gitignore`로 이 폴더를 제외한다.
+- 상위 저장소의 자동 push 훅(`.githooks/post-commit`)은 이 저장소에 적용되지 않는다. push는 직접 한다.
+- 상위 폴더의 `vercel.json`(정적 사이트용)과 무관하다. Vercel 배포는 이 저장소를 그대로 연결한다.
 
 ## 작성 규칙
 

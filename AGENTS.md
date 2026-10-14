@@ -77,9 +77,9 @@ MCP 서버 (로컬 stdio) ──(PAT)──> Edge Function mcp-api      └─> 
 
 ## 저장소 환경
 
-- git 루트는 상위 폴더 `D:\ChaAI`이며 다른 프로젝트(`02_1page`, `03_blog` 등)와 같은 저장소를 쓴다. 이 폴더 밖의 파일은 수정하지 않는다.
-- `core.hooksPath=.githooks`의 **post-commit 훅이 커밋 직후 자동으로 `git push`** 한다. 커밋은 곧 원격(`github.com/greming1-cyber/cal`) 반영이다.
-- 루트 `vercel.json`은 정적 사이트용(`framework: null`)이다. 이 프로젝트의 Next.js 배포는 Root Directory를 `06_calendar`로 지정한 별도 Vercel 프로젝트를 쓴다.
+- 이 폴더는 **독립 git 저장소**다(원격 `github.com/greming1-cyber/AI_calendar`, 브랜치 `main`). 상위 `D:\ChaAI` 저장소는 `.gitignore`로 이 폴더를 제외한다. 이 폴더 밖의 파일은 수정하지 않는다.
+- 상위 저장소의 자동 push 훅(`.githooks/post-commit`)은 이 저장소에 적용되지 않는다. push는 직접 한다.
+- 상위 폴더의 `vercel.json`(정적 사이트용)과 무관하다. Vercel 배포는 이 저장소를 그대로 연결한다.
 - 개발 환경은 Windows + PowerShell이다.
 
 ## 작성 규칙
