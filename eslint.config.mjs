@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Deno(Edge Function)·별도 패키지(MCP 서버)는 Next 린트 대상에서 뺀다.
+    "supabase/functions/**",
+    "mcp/**",
   ]),
 ]);
 
