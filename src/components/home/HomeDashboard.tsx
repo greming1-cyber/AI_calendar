@@ -2,39 +2,63 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CardHead, ProgressBar } from "@/components/ui";
-import { parts, weekday } from "@/lib/date";
+import { CardHead, ErrorState, LoadingState, ProgressBar, useToast } from "@/components/ui";
+import { addDays, isoDate, monthKey, parts, weekday } from "@/lib/date";
 import { pct, won } from "@/lib/format";
-import { CURRENT_WEATHER, GOOGLE_SYNC, PROFILE, PROJECTS, TODAY } from "@/lib/mock-data";
+import { useEvents } from "@/lib/hooks/use-events";
+import { useToday } from "@/lib/hooks/use-today";
+import { useProjects, useTodos, useToggleTodo } from "@/lib/hooks/use-todos";
+import { useBudgets, useTransactions } from "@/lib/hooks/use-transactions";
+import { CURRENT_WEATHER, GOOGLE_SYNC, PROFILE } from "@/lib/mock-data";
 import { BUDGET_WARN, budgetStatus, dailyExpense, monthTotals, recentDays } from "@/lib/money";
-import { eventsOn, useStore } from "@/lib/store";
 import { dueLabel, isOverdue, projectProgress } from "@/lib/todo";
 import { HeroBackground, HeroControls } from "./HeroBackground";
 
 const ARC = 283; // 반지름 90 반원 길이
 
 export function HomeDashboard() {
-  const { events, todos, transactions, toggleTodo } = useStore();
-  const { y, m, d } = parts(TODAY);
+  const today = useToday();
+  const toast = useToast();
+  const { y, m, d } = parts(today);
+  const monthStart = isoDate(y, m, 1);
+  const weekStart = addDays(today, -6);
 
-  // 오늘 할 일 목록은 처음 열었을 때의 미완료 항목으로 고정해, 체크해도 목록에서 사라지지 않게 한다.
-  const [homeTodoIds] = useState(() =>
-    todos.filter((t) => !t.done && t.dueDate <= TODAY).slice(0, 6).map((t) => t.id),
-  );
-  const homeTodos = homeTodoIds.flatMap((id) => todos.find((t) => t.id === id) ?? []);
-  const todayLeft = todos.filter((t) => !t.done && t.dueDate <= TODAY).length;
-  const projects = projectProgress(todos, PROJECTS);
+  const eventsQuery = useEvents({ from: today, to: today });
+  const todosQuery = useTodos();
+  const { data: projectList } = useProjects();
+  // 이번 달 + 최근 7일(지난 달에 걸칠 수 있음)
+  const txQuery = useTransactions({ from: weekStart < monthStart ? weekStart : monthStart, to: today });
+  const budgetsQuery = useBudgets(monthKey(y, m));
+  const toggle = useToggleTodo();
 
-  const todayEvents = eventsOn(events, TODAY);
+  // 오늘 할 일 목록은 처음 읽었을 때의 미완료 항목으로 고정해, 체크해도 목록에서 사라지지 않게 한다.
+  const [homeTodoIds, setHomeTodoIds] = useState<string[] | null>(null);
+  if (homeTodoIds === null && todosQuery.data) {
+    setHomeTodoIds(todosQuery.data.filter((t) => !t.done && t.dueDate != null && t.dueDate <= today).slice(0, 6).map((t) => t.id));
+  }
+
+  const queries = [eventsQuery, todosQuery, txQuery, budgetsQuery];
+  if (queries.some((q) => q.isPending)) return <LoadingState />;
+  if (queries.some((q) => q.isError)) return <ErrorState retry={() => queries.forEach((q) => q.refetch())} />;
+  const todos = todosQuery.data ?? [];
+  const transactions = txQuery.data ?? [];
+
+  const homeTodos = (homeTodoIds ?? []).flatMap((id) => todos.find((t) => t.id === id) ?? []);
+  const todayLeft = todos.filter((t) => !t.done && t.dueDate != null && t.dueDate <= today).length;
+  const projects = projectProgress(todos, projectList?.map((p) => p.name) ?? []);
+
+  const todayEvents = eventsQuery.data ?? [];
   const allDay = todayEvents.filter((e) => e.allDay);
   const timed = todayEvents.filter((e) => !e.allDay);
 
   const month = monthTotals(transactions, y, m);
-  const budget = budgetStatus(month.list.filter((t) => t.type === "expense"));
-  const week = recentDays(transactions, TODAY);
+  const budget = budgetStatus(month.list.filter((t) => t.type === "expense"), budgetsQuery.data ?? []);
+  const week = recentDays(transactions, today);
   const weekMax = Math.max(...week.map((w) => w.amount), 1);
   const usedPct = pct(budget.spent, budget.total);
 
+  const toggleTodo = (id: string, done: boolean) =>
+    toggle.mutate({ id, done }, { onError: () => toast.error("완료 상태를 바꾸지 못했어요.") });
   return (
     <>
       <HeroBackground />
@@ -49,7 +73,7 @@ export function HomeDashboard() {
         <div className="flex flex-wrap justify-end gap-2 text-xs">
           <HeroControls />
           <span className="pill pill-glass px-3.5 py-[9px]">
-            {m}월 {d}일 ({weekday(TODAY)}) ▾
+            {m}월 {d}일 ({weekday(today)}) ▾
           </span>
           <Link href="/calendar" className="pill pill-glass px-3.5 py-[9px]">
             + 일정
@@ -113,7 +137,7 @@ export function HomeDashboard() {
             <CardHead title="최근 7일 지출" meta="일별" />
             <div className="flex items-baseline gap-1.5">
               <span className="text-[34px] leading-none font-semibold">
-                {dailyExpense(transactions, TODAY).toLocaleString("ko-KR")}
+                {dailyExpense(transactions, today).toLocaleString("ko-KR")}
               </span>
               <span className="text-xs text-muted">원 · 오늘</span>
             </div>
@@ -198,12 +222,12 @@ export function HomeDashboard() {
           <section className="card card-glass gap-[9px]">
             <CardHead title="오늘 할 일" meta="체크해서 완료" />
             {homeTodos.map((t) => {
-              const over = isOverdue(t, TODAY);
+              const over = isOverdue(t, today);
               return (
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => toggleTodo(t.id)}
+                  onClick={() => toggleTodo(t.id, !t.done)}
                   className="flex items-center gap-2.5 text-left text-[13px]"
                   style={{ color: t.done ? "var(--color-subtle)" : over ? "var(--color-danger)" : "var(--color-fg)" }}
                 >
@@ -211,7 +235,7 @@ export function HomeDashboard() {
                     {t.done ? "✓" : ""}
                   </span>
                   <span className={t.done ? "line-through" : ""}>{t.title}</span>
-                  <span className="ml-auto text-[11px] whitespace-nowrap text-subtle">{dueLabel(t, TODAY)}</span>
+                  <span className="ml-auto text-[11px] whitespace-nowrap text-subtle">{dueLabel(t, today)}</span>
                 </button>
               );
             })}

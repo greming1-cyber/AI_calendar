@@ -16,17 +16,38 @@ npm run lint     # ESLint
 
 테스트는 아직 없다. Next.js 16.4 + React 19 + Tailwind v4이며, `next.config.ts`에 `cacheComponents`가 켜져 있다. 학습 데이터와 API가 다를 수 있으니 Next 관련 코드는 `node_modules/next/dist/docs/`를 먼저 확인한다. `next/font/google`은 Tailwind turbopack 로더와 충돌해 빌드가 깨지므로 폰트는 `globals.css`의 `@import url(...)`로 불러온다.
 
+`npm run dev`는 `AGENTS.md` 끝에 Next.js 에이전트 안내 블록(`nextjs-agent-rules` HTML 주석으로 감싼 부분)을 자동으로 넣는다. 지우지 말고 그대로 둔다. 문서 본문에 그 시작 주석을 글자 그대로 적으면 `next dev`가 그 자리부터 파일 끝까지 덮어쓰므로 적지 않는다.
+
 ## 현재 상태
 
-M0 단계: Claude Design 시안(`Life Manager App.dc.html`)을 옮긴 화면이 **예시 데이터로** 동작한다. Supabase·인증·외부 API는 아직 연결하지 않았다.
+M0 기반(세션 00) 완료: 로그인과 Supabase 실데이터 구조가 들어갔다. 일정·할일·가계부 화면은 DB에서 **읽어서** 보여 주고, 쓰기는 최소 구현(일정 저장·삭제, 할일 완료 토글)만 있다. 날씨·구글·MCP는 아직 `mock-data.ts` 예시다.
 
-- `src/app/` — 라우트 `/`(홈), `/calendar`, `/todos`, `/money`, `/settings`. 각 `page.tsx`는 `src/components/<화면>/`의 클라이언트 컴포넌트만 렌더링한다. 공통 셸(사이드바·헤더)은 `layout.tsx`.
-- `src/lib/store.tsx` — 화면 간 공유 상태(일정, 할일 완료)를 담은 `StoreProvider`/`useStore`. Supabase 연결 시 이 훅의 구현만 쿼리·뮤테이션으로 바꾸고 화면 코드는 그대로 둔다.
-- `src/lib/mock-data.ts` — 예시 데이터. 기준일은 `TODAY`(2026-10-14) 상수이며, 화면은 `new Date()` 대신 이 값을 쓴다.
+- `src/app/` — 라우트 `/`(홈), `/calendar`, `/todos`, `/money`, `/settings`. 각 `page.tsx`는 `src/components/<화면>/`의 클라이언트 컴포넌트만 렌더링한다. `(auth)/`는 `/login`, `/signup`, `/reset-password`, `/update-password`, `/auth/callback`(이메일 인증·구글 로그인·재설정 링크 처리).
+- `src/app/layout.tsx` → `providers.tsx`(TanStack Query, 토스트) → `components/shell/AppShell.tsx`(사이드바·헤더). AppShell은 화면 본문을 **브라우저에서만** 그린다. `cacheComponents`가 클라이언트 컴포넌트도 서버에서 미리 렌더하는데, 화면들이 현재 시각과 쿼리 상태를 읽기 때문이다. 로그인 화면은 셸 없이 보여 준다.
+- `src/proxy.ts` — 요청마다 세션 쿠키를 갱신하고 미로그인 사용자를 `/login?next=…`로 보낸다(Next 16의 middleware 대체). 환경변수가 없으면 인증 없이 통과한다.
+- `src/lib/supabase/` — `client.ts`(브라우저), `server.ts`(서버 컴포넌트·라우트 핸들러, `cookies()` 사용), `admin.ts`(service role, 서버 전용), `account-actions.ts`(회원 탈퇴 서버 액션), `database.types.ts`(DB 타입).
+- **데이터 계층**: 화면 → `src/lib/hooks/use-<도메인>.ts`(TanStack Query 훅) → `src/lib/data/<도메인>.ts`(Supabase 쿼리, DB 행 ↔ 화면 타입 변환 `toEvent` 등) → Supabase(RLS).
+  - 쿼리 키는 도메인명이 첫 원소다: `['events', from, to, tz]`, `['todos', filter]`, `['transactions', from, to]`, `['budgets', 'YYYY-MM']`, `['profile']` 등. 쓰기 후에는 도메인 키 전체(`['events']`)를 무효화한다.
+  - 조회 함수·훅의 기존 시그니처는 공유 계약이라 바꾸지 않는다. 필요하면 선택 인자나 새 함수를 추가한다.
+- `src/lib/types/` — 도메인별 화면 타입(`common`, `events`, `todos`, `money`). `@/lib/types`가 모두 다시 내보낸다.
+- 오늘 날짜는 `useToday()`(사용자 타임존 `profiles.timezone` 기준 `YYYY-MM-DD`)를 쓴다. `new Date()`로 날짜를 만들지 않는다. timestamptz ↔ 날짜·시각 변환은 `date.ts`의 `zonedParts`, `zonedToUtc`.
 - `src/lib/money.ts`, `todo.ts`, `date.ts` — 집계·정렬·날짜 계산. 날짜는 `YYYY-MM-DD` 문자열이고 UTC 기준으로 계산해 타임존 영향을 받지 않게 한다.
+- 공용 UI는 `src/components/ui/`(`CardHead`, `ProgressBar`, `Switch`, `Segmented`, `Modal`, `useToast`, `LoadingState`, `ErrorState`)이고 `@/components/ui`로 가져온다. 설정 화면은 탭별 파일(`components/settings/*Tab.tsx`)로 나뉘어 있다.
 - 디자인 토큰(색·폰트)은 `globals.css`의 `@theme`, 반복되는 카드·알약 버튼·세그먼트·입력·스위치는 `@layer components`의 `.card`, `.pill`, `.seg`, `.field`, `.switch` 클래스다. 기본 스타일은 `@layer base`에 둬야 유틸리티 클래스가 덮어쓸 수 있다.
-- `npm run dev`는 이 파일 끝에 Next.js 에이전트 안내 블록(`<!-- BEGIN:nextjs-agent-rules -->`)을 자동으로 추가할 수 있다. 지우지 말고 그대로 둔다.
 
+## Supabase
+
+- 환경변수: `.env.example`을 `.env.local`로 복사해 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`(서버 전용)를 채운다. `.env.local`은 커밋하지 않는다.
+- 스키마는 `supabase/migrations/0001_init.sql`(PRD 4.3 전체 테이블, RLS, 가입 트리거 `handle_new_user`, `seed_demo`). 적용한 마이그레이션은 고치지 않고 새 파일을 추가한다(`docs/sessions/README.md` 5절).
+- 명령(main 작업 폴더에서):
+  ```powershell
+  npx supabase link --project-ref <ref>
+  npx supabase db push                                                    # 마이그레이션 적용
+  npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
+  npx supabase functions deploy <이름>                                    # Edge Function 배포
+  ```
+- 테스트 계정은 세션마다 따로 만든다(예: `dev+calendar@…`). 시안과 같은 예시 데이터는 설정 → 내 정보 → "예시 데이터 채우기" 또는 SQL `select public.seed_demo('<user uuid>');`로 넣는다. 그 사용자의 일정·할일·가계부 내역·고정지출·예산을 **지우고** 오늘 날짜 기준으로 다시 넣는다.
+- 클라이언트 insert는 `user_id`를 생략해도 된다(기본값 `auth.uid()`).
 | 문서 | 역할 |
 |---|---|
 | `PRD.md` | 요구사항의 기준 문서. 요구사항 ID(`EVT-01`, `GCAL-04`, `MCP-05` …)와 우선순위(P0=MVP, P1, P2), 데이터 모델(4.3), MCP 도구 명세(4.4), 동기화·날씨 흐름(4.5, 4.6), 로드맵(M0~M5) |
