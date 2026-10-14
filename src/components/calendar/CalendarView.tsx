@@ -1,18 +1,12 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { CardHead, Segmented } from "@/components/ui";
+import { CardHead, ErrorState, LoadingState, Segmented } from "@/components/ui";
 import { WEEKDAYS, longLabel, monthGrid, parts, shiftMonth } from "@/lib/date";
-import {
-  DAILY_WEATHER,
-  EVENT_CATEGORIES,
-  OUTDOOR_CATEGORIES,
-  PROFILE,
-  TODAY,
-  categoryColor,
-} from "@/lib/mock-data";
-import { eventsOn, useStore } from "@/lib/store";
-import type { ISODate } from "@/lib/types";
+import { categoryColorOf, useEventCategories, useEvents } from "@/lib/hooks/use-events";
+import { useToday } from "@/lib/hooks/use-today";
+import { OUTDOOR_CATEGORIES, PROFILE, dailyWeather } from "@/lib/mock-data";
+import type { CalendarEvent, ISODate } from "@/lib/types";
 import { EventModal } from "./EventModal";
 
 const VIEWS = [
@@ -23,17 +17,28 @@ const VIEWS = [
 
 const RAIN_ALERT = 60;
 
+const eventsOn = (events: CalendarEvent[], date: ISODate) => events.filter((e) => e.date === date);
+
 export function CalendarView() {
-  const { events } = useStore();
-  const today = parts(TODAY);
+  const todayIso = useToday();
+  const today = parts(todayIso);
   const [cursor, setCursor] = useState({ y: today.y, m: today.m });
-  const [selected, setSelected] = useState<ISODate>(TODAY);
+  const [selected, setSelected] = useState<ISODate>(todayIso);
   const [modal, setModal] = useState<{ date: ISODate; editId: string | null } | null>(null);
   const closeModal = useCallback(() => setModal(null), []);
 
   const cells = monthGrid(cursor.y, cursor.m);
+  const eventsQuery = useEvents({ from: cells[0].date, to: cells[cells.length - 1].date });
+  const { data: categories } = useEventCategories();
+  const color = (name: string) => categoryColorOf(categories, name);
+
+  if (eventsQuery.isPending) return <LoadingState />;
+  if (eventsQuery.isError) return <ErrorState retry={() => eventsQuery.refetch()} />;
+  const events = eventsQuery.data;
+
+  const weather = dailyWeather(todayIso);
   const selEvents = eventsOn(events, selected);
-  const selWx = DAILY_WEATHER[selected];
+  const selWx = weather[selected];
   const rainAlert = selWx && selWx.rainChance >= RAIN_ALERT && selEvents.some((e) => OUTDOOR_CATEGORIES.includes(e.category));
 
   const open = (date: ISODate, editId: string | null = null) => {
@@ -60,7 +65,7 @@ export function CalendarView() {
             type="button"
             onClick={() => {
               setCursor({ y: today.y, m: today.m });
-              setSelected(TODAY);
+              setSelected(todayIso);
             }}
             className="pill px-3 py-1.5"
           >
@@ -88,8 +93,8 @@ export function CalendarView() {
           {cells.map(({ date, inMonth }) => {
             const list = inMonth ? eventsOn(events, date) : [];
             const isSel = inMonth && date === selected;
-            const isToday = date === TODAY;
-            const wx = inMonth ? DAILY_WEATHER[date]?.label : undefined;
+            const isToday = date === todayIso;
+            const wx = inMonth ? weather[date]?.label : undefined;
             return (
               <div
                 key={date}
@@ -122,7 +127,7 @@ export function CalendarView() {
                   <div
                     key={e.id}
                     className="truncate rounded-[5px] px-1.5 py-0.5 text-[11px] text-fg"
-                    style={{ background: `color-mix(in oklch, ${categoryColor(e.category)} 45%, #1c1a18)` }}
+                    style={{ background: `color-mix(in oklch, ${color(e.category)} 45%, #1c1a18)` }}
                   >
                     {e.source === "google" ? "G · " : ""}
                     {e.title}
@@ -150,14 +155,14 @@ export function CalendarView() {
               onClick={() => open(selected, e.id)}
               className="grid grid-cols-[4px_1fr] gap-3 border-b border-line py-2.5 text-left"
             >
-              <div className="rounded-xs" style={{ background: categoryColor(e.category) }} />
+              <div className="rounded-xs" style={{ background: color(e.category) }} />
               <div className="flex flex-col gap-[3px]">
                 <span className="text-[15px] font-semibold">{e.title}</span>
                 <span className="text-xs text-muted">
                   {e.allDay ? "종일" : e.end ? `${e.start}–${e.end}` : e.start} · {e.location || "-"}
                 </span>
                 <span className="text-[11px] text-subtle">
-                  {e.category} · {e.source === "google" ? "Google 캘린더" : "내 캘린더"}
+                  {e.category || "분류 없음"} · {e.source === "google" ? "Google 캘린더" : "내 캘린더"}
                 </span>
               </div>
             </button>
@@ -172,8 +177,8 @@ export function CalendarView() {
         {/* EVT-06: 카테고리 */}
         <section className="card card-flat gap-2.5 p-5">
           <CardHead title="카테고리" meta={<span className="text-xs">관리</span>} />
-          {EVENT_CATEGORIES.map((c) => (
-            <div key={c.name} className="flex items-center gap-2.5 text-[13px]">
+          {categories?.map((c) => (
+            <div key={c.id} className="flex items-center gap-2.5 text-[13px]">
               <span className="size-2.5 rounded-[3px]" style={{ background: c.color }} />
               {c.name}
               <span className="ml-auto text-[11px] text-subtle">{events.filter((e) => e.category === c.name).length}건</span>
@@ -189,6 +194,7 @@ export function CalendarView() {
           date={modal.date}
           editId={modal.editId}
           dayEvents={eventsOn(events, modal.date)}
+          categories={categories ?? []}
           onPick={(editId) => setModal({ date: modal.date, editId })}
           onClose={closeModal}
         />

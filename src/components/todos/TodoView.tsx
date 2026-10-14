@@ -1,17 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { CardHead, ProgressBar } from "@/components/ui";
+import { CardHead, ErrorState, LoadingState, ProgressBar, useToast } from "@/components/ui";
 import { shortLabel } from "@/lib/date";
-import { PROJECTS, RECURRING_TODOS, TODAY } from "@/lib/mock-data";
-import { useStore } from "@/lib/store";
-import { PRIORITY, TODO_TABS, byPriority, dueLabel, isOverdue, projectProgress, type TodoTab } from "@/lib/todo";
+import { useToday } from "@/lib/hooks/use-today";
+import { useProjects, useTodos, useToggleTodo } from "@/lib/hooks/use-todos";
+import { PRIORITY, TODO_TABS, byPriority, dueLabel, isOverdue, projectProgress, rruleLabel, type TodoTab } from "@/lib/todo";
 
 export function TodoView() {
-  const { todos, toggleTodo } = useStore();
+  const today = useToday();
+  const toast = useToast();
+  const todosQuery = useTodos();
+  const { data: projectList } = useProjects();
+  const toggle = useToggleTodo();
   const [tab, setTab] = useState<TodoTab>("today");
-  const list = todos.filter((t) => TODO_TABS[tab].filter(t, TODAY)).sort(byPriority);
-  const projects = projectProgress(todos, PROJECTS);
+
+  if (todosQuery.isPending) return <LoadingState />;
+  if (todosQuery.isError) return <ErrorState retry={() => todosQuery.refetch()} />;
+  const todos = todosQuery.data;
+
+  const list = todos.filter((t) => TODO_TABS[tab].filter(t, today)).sort(byPriority);
+  const projects = projectProgress(todos, projectList?.map((p) => p.name) ?? []);
+  const recurring = todos.filter((t) => t.rrule && !t.done);
+
+  const toggleTodo = (id: string, done: boolean) =>
+    toggle.mutate({ id, done }, { onError: () => toast.error("완료 상태를 바꾸지 못했어요.") });
 
   return (
     <main className="flex flex-wrap items-start gap-4 px-4 pb-7 md:px-7">
@@ -21,7 +34,7 @@ export function TodoView() {
           <div className="seg sm:ml-3">
             {(Object.keys(TODO_TABS) as TodoTab[]).map((id) => (
               <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)} className="seg-item">
-                {TODO_TABS[id].label} {todos.filter((t) => TODO_TABS[id].filter(t, TODAY)).length}
+                {TODO_TABS[id].label} {todos.filter((t) => TODO_TABS[id].filter(t, today)).length}
               </button>
             ))}
           </div>
@@ -31,13 +44,13 @@ export function TodoView() {
 
         <div className="flex flex-col">
           {list.map((t) => {
-            const over = isOverdue(t, TODAY);
+            const over = isOverdue(t, today);
             const pri = PRIORITY[t.priority];
             return (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => toggleTodo(t.id)}
+                onClick={() => toggleTodo(t.id, !t.done)}
                 aria-pressed={t.done}
                 className="grid grid-cols-[22px_minmax(0,1fr)_52px_70px] items-center gap-3.5 border-b border-line px-2 py-3.5 text-left hover:bg-white/[.03] sm:grid-cols-[22px_minmax(0,1fr)_60px_60px_70px]"
               >
@@ -64,7 +77,7 @@ export function TodoView() {
                 </span>
                 <span className="hidden text-xs text-muted sm:inline">{t.project}</span>
                 <span className="text-right text-xs" style={{ color: over ? "var(--color-danger)" : "var(--color-muted)" }}>
-                  {dueLabel(t, TODAY)}
+                  {dueLabel(t, today)}
                 </span>
               </button>
             );
@@ -93,11 +106,13 @@ export function TodoView() {
         {/* TODO-07 */}
         <section className="card card-flat gap-2.5 p-5">
           <span className="text-[15px] font-semibold">반복 할일</span>
-          {RECURRING_TODOS.map((r) => (
-            <div key={r.title} className="flex flex-col gap-0.5 border-b border-line py-1.5">
+          {!recurring.length && <span className="text-[13px] text-subtle">반복 할일이 없어요.</span>}
+          {recurring.map((r) => (
+            <div key={r.id} className="flex flex-col gap-0.5 border-b border-line py-1.5">
               <span className="text-[13px]">{r.title}</span>
               <span className="text-[11px] text-subtle">
-                {r.rule} · 다음 {shortLabel(r.next)}
+                {rruleLabel(r.rrule ?? "")}
+                {r.dueDate ? ` · 다음 ${shortLabel(r.dueDate)}` : ""}
               </span>
             </div>
           ))}

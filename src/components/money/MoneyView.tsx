@@ -1,38 +1,64 @@
 "use client";
 
 import { useState } from "react";
-import { CardHead, ProgressBar, Segmented } from "@/components/ui";
-import { parts, shiftMonth, weekday } from "@/lib/date";
+import { CardHead, ErrorState, LoadingState, ProgressBar, Segmented } from "@/components/ui";
+import { isoDate, monthKey, monthRange, parts, shiftMonth, weekday } from "@/lib/date";
 import { manwon, pct, signedWon, won } from "@/lib/format";
+import { useToday } from "@/lib/hooks/use-today";
 import {
-  PAST_MONTHS,
-  PREV_MONTH_SAME_PERIOD_EXPENSE,
-  TODAY,
-  TX_CATEGORY_COLORS,
-  UPCOMING_FIXED,
-} from "@/lib/mock-data";
-import { BUDGET_WARN, budgetStatus, expenseByCategory, groupByDate, monthTotals } from "@/lib/money";
-import { useStore } from "@/lib/store";
+  txCategoryColorOf,
+  useBudgets,
+  useRecurringTransactions,
+  useTransactions,
+  useTxCategories,
+} from "@/lib/hooks/use-transactions";
+import {
+  BUDGET_WARN,
+  budgetStatus,
+  expenseByCategory,
+  groupByDate,
+  monthTotals,
+  nextOccurrence,
+  prevMonthSamePeriodExpense,
+} from "@/lib/money";
 
 const OTHER_COLOR = "rgb(255 255 255 / .25)";
+const TREND_MONTHS = 6;
 
 export function MoneyView() {
-  const { transactions } = useStore();
-  const today = parts(TODAY);
+  const todayIso = useToday();
+  const today = parts(todayIso);
   const [cursor, setCursor] = useState({ y: today.y, m: today.m });
   const isCurrent = cursor.y === today.y && cursor.m === today.m;
 
-  const month = monthTotals(transactions, cursor.y, cursor.m);
+  const monthQuery = useTransactions(monthRange(cursor.y, cursor.m));
+  // 월별 추이(최근 6개월)와 전월 같은 기간 비교용
+  const trendStart = shiftMonth(today.y, today.m, -(TREND_MONTHS - 1));
+  const trendQuery = useTransactions({ from: isoDate(trendStart.y, trendStart.m, 1), to: monthRange(today.y, today.m).to });
+  const budgetsQuery = useBudgets(monthKey(cursor.y, cursor.m));
+  const { data: categories } = useTxCategories();
+  const { data: recurring } = useRecurringTransactions();
+
+  const queries = [monthQuery, trendQuery, budgetsQuery];
+  if (queries.some((q) => q.isPending)) return <LoadingState />;
+  if (queries.some((q) => q.isError)) return <ErrorState retry={() => queries.forEach((q) => q.refetch())} />;
+  const color = (name: string) => txCategoryColorOf(categories, name);
+
+  const month = monthTotals(monthQuery.data ?? [], cursor.y, cursor.m);
   const expenses = month.list.filter((t) => t.type === "expense");
-  const budget = budgetStatus(expenses);
+  const budget = budgetStatus(expenses, budgetsQuery.data ?? []);
   const groups = groupByDate(month.list);
-  const change = Math.round(((month.expense - PREV_MONTH_SAME_PERIOD_EXPENSE) / PREV_MONTH_SAME_PERIOD_EXPENSE) * 1000) / 10;
-  const upcoming = UPCOMING_FIXED.filter((f) => f.date > TODAY);
+  const prevExpense = prevMonthSamePeriodExpense(trendQuery.data ?? [], todayIso);
+  const change = prevExpense ? Math.round(((month.expense - prevExpense) / prevExpense) * 1000) / 10 : null;
+  const upcoming = (recurring ?? [])
+    .filter((r) => r.type === "expense")
+    .map((r) => ({ ...r, date: nextOccurrence(r, todayIso) }))
+    .filter((r) => parts(r.date).m === today.m);
 
   // TX-08: 상위 4개 분류 + 기타
   const byCat = [...expenseByCategory(expenses).entries()].sort((a, b) => b[1] - a[1]);
   const share = [
-    ...byCat.slice(0, 4).map(([name, v]) => ({ name, value: v, color: TX_CATEGORY_COLORS[name] ?? OTHER_COLOR })),
+    ...byCat.slice(0, 4).map(([name, v]) => ({ name: name || "분류 없음", value: v, color: color(name) })),
     ...(byCat.length > 4 ? [{ name: "기타", value: byCat.slice(4).reduce((s, [, v]) => s + v, 0), color: OTHER_COLOR }] : []),
   ];
   let acc = 0;
@@ -44,9 +70,11 @@ export function MoneyView() {
     })
     .join(",");
 
-  const trend = [...PAST_MONTHS, { label: `${today.m}월`, ...monthTotals(transactions, today.y, today.m) }];
+  const trend = Array.from({ length: TREND_MONTHS }, (_, i) => {
+    const t = shiftMonth(trendStart.y, trendStart.m, i);
+    return { label: `${t.m}월`, ...monthTotals(trendQuery.data ?? [], t.y, t.m) };
+  });
   const trendMax = Math.max(...trend.flatMap((t) => [t.income, t.expense]), 1);
-
   return (
     <main className="flex flex-col gap-3 px-4 pb-7 md:px-7">
       <div className="flex flex-wrap items-center gap-3">
@@ -85,7 +113,7 @@ export function MoneyView() {
         <section className="card card-flat gap-1.5">
           <span className="text-[13px] text-muted">지출</span>
           <span className="text-[26px] font-semibold">{won(month.expense)}</span>
-          {isCurrent && (
+          {isCurrent && change != null && (
             <span className="text-[11px] text-accent">
               전월 같은 기간 대비 {change > 0 ? "+" : ""}
               {change}%
@@ -146,7 +174,7 @@ export function MoneyView() {
                   <div key={x.id} className="grid grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 border-b border-white/[.06] py-[7px]">
                     <span
                       className="flex size-[34px] items-center justify-center rounded-full text-[11px]"
-                      style={{ background: `color-mix(in oklch, ${TX_CATEGORY_COLORS[x.category] ?? OTHER_COLOR} 40%, #1c1a18)` }}
+                      style={{ background: `color-mix(in oklch, ${color(x.category)} 40%, #1c1a18)` }}
                     >
                       {x.category.slice(0, 2)}
                     </span>
