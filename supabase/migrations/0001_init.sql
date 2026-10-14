@@ -513,6 +513,7 @@ begin
   end loop;
 
   -- 할일: (제목, 시안 마감일, 우선순위, 프로젝트, 메모, 완료, 반복, 연결 일정 제목)
+  --   반복 'WEEKLY'는 실행일로 옮긴 마감일의 요일로 RRULE·메모를 만든다(시안: 10/14 수, 10/16 금).
   for r in
     select * from (values
       ('보험 서류 제출', 12, 1, '개인', '', false, null, null),
@@ -520,28 +521,41 @@ begin
       ('치과 예약 확인', 14, 2, '개인', '', false, null, null),
       ('택배 반품 접수', 14, 3, '개인', '', false, null, null),
       ('생신 선물 포장', 14, 2, '가족', '엄마 생신 일정 연결', false, null, '엄마 생신'),
-      ('운동 기록 정리', 14, 3, '개인', '매주 수 반복', false, 'FREQ=WEEKLY;BYDAY=WE', null),
+      ('운동 기록 정리', 14, 3, '개인', '', false, 'WEEKLY', null),
       ('디자인 리뷰 자료 준비', 19, 1, '업무', '디자인 리뷰 일정 연결', false, null, '디자인 리뷰'),
       ('등산 장비 점검', 16, 2, '개인', '', false, null, null),
       ('가족 여행 숙소 예약', 24, 2, '가족', '', false, null, null),
-      ('공과금 납부', 12, 1, '개인', '매월 12일 반복', true, 'FREQ=MONTHLY;BYMONTHDAY=12', null),
+      -- 반복 할일을 완료하면 완료본은 rrule이 null이 되고 다음 회차가 rrule을 이어받는다(아래 별도 insert).
+      ('공과금 납부', 12, 1, '개인', '매월 ' || extract(day from v_today - 2)::int || '일 반복', true, null, null),
       ('팀 회의 안건 공유', 13, 2, '업무', '', true, null, null),
-      ('주간 회고', 16, 2, '개인', '매주 금 반복', false, 'FREQ=WEEKLY;BYDAY=FR', null)
+      ('주간 회고', 16, 2, '개인', '', false, 'WEEKLY', null)
     ) as t(title, d, priority, project, memo, done, rrule, event_title)
   loop
     insert into public.todos (user_id, title, memo, due_date, priority, project_id, completed_at, rrule, event_id)
     values (
       uid,
       r.title,
-      r.memo,
+      case when r.rrule = 'WEEKLY'
+        then '매주 ' || (array['일','월','화','수','목','금','토'])[extract(dow from v_today + (r.d - 14))::int + 1] || ' 반복'
+        else r.memo end,
       v_today + (r.d - 14),
       r.priority,
       (select id from public.projects where user_id = uid and name = r.project),
       case when r.done then now() else null end,
-      r.rrule,
+      case when r.rrule = 'WEEKLY'
+        then 'FREQ=WEEKLY;BYDAY=' || (array['SU','MO','TU','WE','TH','FR','SA'])[extract(dow from v_today + (r.d - 14))::int + 1]
+        else r.rrule end,
       (select id from public.events where user_id = uid and title = r.event_title limit 1)
     );
   end loop;
+
+  -- '공과금 납부' 다음 회차: 완료본 마감일의 한 달 뒤, 미완료
+  insert into public.todos (user_id, title, memo, due_date, priority, project_id, rrule)
+  values (
+    uid, '공과금 납부', '매월 ' || extract(day from v_today - 2)::int || '일 반복', ((v_today - 2) + interval '1 month')::date, 1,
+    (select id from public.projects where user_id = uid and name = '개인'),
+    'FREQ=MONTHLY;BYMONTHDAY=' || extract(day from v_today - 2)::int
+  );
 
   -- 이번 달 내역: (시안 날짜, 분류, 메모, 결제수단, 금액(+수입/-지출), Claude 경유)
   for r in
