@@ -14,20 +14,20 @@ import {
   useTodos,
   useToggleTodo,
 } from "@/lib/hooks/use-todos";
+import { parseEventId } from "@/lib/data/events";
+import type { Freq, Weekday } from "@/lib/rrule";
 import {
   PRIORITIES,
   PRIORITY,
   RULE_DAYS,
   RULE_FREQS,
-  buildRule,
+  buildTodoRule,
   dayLabel,
   nextDue,
-  parseRule,
+  readTodoRule,
   ruleDayOf,
-  type RuleDay,
-  type RuleFreq,
 } from "@/lib/todo";
-import type { ISODate, Todo, TodoInput } from "@/lib/types";
+import type { CalendarEvent, ISODate, Todo, TodoInput } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -57,9 +57,9 @@ const toInput = (t: Todo): TodoInput => ({
 });
 
 interface RuleState {
-  freq: RuleFreq | "";
+  freq: Freq | "";
   interval: number;
-  byDay: RuleDay[];
+  byDay: Weekday[];
   monthLast: boolean;
   until: ISODate | "";
 }
@@ -90,12 +90,12 @@ function TodoForm({ onClose, initial, todo }: Omit<Props, "open">) {
   const set = <K extends keyof TodoInput>(k: K, v: TodoInput[K]) => setF((s) => ({ ...s, [k]: v }));
 
   const [rule, setRule] = useState<RuleState>(() => {
-    const r = parseRule(f.rrule);
+    const r = readTodoRule(f.rrule);
     return {
       freq: r?.freq ?? "",
       interval: r?.interval ?? 1,
       byDay: r?.byDay.length ? r.byDay : [ruleDayOf(f.dueDate ?? today)],
-      monthLast: (r?.monthDay ?? 0) < 0,
+      monthLast: r?.monthLast ?? false,
       until: r?.until ?? "",
     };
   });
@@ -109,15 +109,7 @@ function TodoForm({ onClose, initial, todo }: Omit<Props, "open">) {
   const base = f.dueDate ?? today;
 
   // 반복 규칙: DB todo_next_due가 지원하는 형태만 만든다.
-  const rrule = rule.freq
-    ? buildRule({
-        freq: rule.freq,
-        interval: rule.interval,
-        byDay: rule.freq === "WEEKLY" ? rule.byDay : [],
-        monthDay: rule.freq === "MONTHLY" ? (rule.monthLast ? -1 : parts(base).d) : null,
-        until: rule.until || null,
-      })
-    : null;
+  const rrule = rule.freq ? buildTodoRule({ ...rule, freq: rule.freq, until: rule.until || null }, base) : null;
   const preview = rrule ? nextDue(rrule, base) : null;
 
   const save = () => {
@@ -293,7 +285,7 @@ function RuleFields({
       <Segmented
         options={[{ value: "", label: "안 함" }, ...Object.entries(RULE_FREQS).map(([value, label]) => ({ value, label }))]}
         value={rule.freq}
-        onChange={(v) => setR("freq", v as RuleFreq | "")}
+        onChange={(v) => setR("freq", v as Freq | "")}
       />
       {rule.freq === "WEEKLY" && (
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="반복 요일">
@@ -469,18 +461,32 @@ function SubtaskList({ parent }: { parent: Todo }) {
 
 // ── 연결 일정 (TODO-08) ──────────────────────────────────
 
+const dayDistance = (a: ISODate, b: ISODate) => Math.abs(Date.parse(a) - Date.parse(b));
+
+/**
+ * todos.event_id에는 일정 행 id(parseEventId(id).rowId)를 저장한다.
+ * 반복 회차("<원본id>:<날짜>")는 원본 id로 묶어, 마감일에 가장 가까운 회차 하나만 보여 준다.
+ */
 function EventPicker({ base, value, onChange }: { base: ISODate; value: string | null; onChange: (v: string | null) => void }) {
   const { data: events = [], isPending } = useEvents({ from: addDays(base, -7), to: addDays(base, 7) });
-  const known = !value || events.some((e) => e.id === value);
+  const byRow = new Map<string, CalendarEvent>();
+  for (const e of events) {
+    const { rowId } = parseEventId(e.id);
+    const prev = byRow.get(rowId);
+    if (!prev || dayDistance(e.date, base) < dayDistance(prev.date, base)) byRow.set(rowId, e);
+  }
+  const options = [...byRow].sort(([, a], [, b]) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+  const known = !value || byRow.has(value);
   return (
     <label className="flex min-w-0 flex-col gap-1.5 text-xs text-muted">
       연결 일정
       <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} className="field">
         <option value="">{isPending ? "일정 불러오는 중…" : "연결 안 함"}</option>
         {!known && <option value={value!}>연결된 일정(마감일 ±7일 밖)</option>}
-        {events.map((e) => (
-          <option key={e.id} value={e.id}>
+        {options.map(([rowId, e]) => (
+          <option key={rowId} value={rowId}>
             {shortLabel(e.date)} {e.allDay ? "종일" : e.start} · {e.title}
+            {e.rrule || e.occurrenceDate ? " (반복)" : ""}
           </option>
         ))}
       </select>

@@ -1,4 +1,14 @@
-import { addDays, isoDate, parts, shortLabel } from "./date";
+import { WEEKDAYS, parts, shortLabel } from "./date";
+import {
+  RRuleError,
+  WEEKDAY_CODES,
+  buildRRule,
+  describeRRule,
+  parseRRule,
+  todoNextDue,
+  type Freq,
+  type Weekday,
+} from "./rrule";
 import type { ISODate, Priority, Todo } from "./types";
 
 export const PRIORITY: Record<Priority, { label: string; rank: number; bg: string; fg: string }> = {
@@ -76,99 +86,66 @@ export const todoMeta = (t: Todo) =>
     .join(" · ");
 
 // ── 반복 규칙 (TODO-07) ──────────────────────────────────
-// TODO(02): rrule.ts로 교체. 01이 main에 병합되면 todoNextDue·describeRRule·buildRRule을 쓴다.
-// 지금은 DB 함수 todo_next_due(20261014150000_todos_complete_todo.sql)와 같은 규칙으로 계산한다.
-// 지원: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, INTERVAL, BYDAY(서수 없음), BYMONTHDAY(양수 1개 또는 -1), UNTIL
+// 계산·설명·직렬화는 rrule.ts(01)를 쓴다. 할일은 DB todo_next_due가 지원하는 규칙만 만든다:
+// FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, INTERVAL, BYDAY(서수 없음, WEEKLY), BYMONTHDAY(마감일 날짜 또는 -1, MONTHLY), UNTIL(날짜)
 
-export const RULE_FREQS = { DAILY: "매일", WEEKLY: "매주", MONTHLY: "매월", YEARLY: "매년" } as const;
-export type RuleFreq = keyof typeof RULE_FREQS;
+export const RULE_FREQS = { DAILY: "매일", WEEKLY: "매주", MONTHLY: "매월", YEARLY: "매년" } as const satisfies Record<Freq, string>;
 
-/** 월요일부터. ISO 요일 번호(월=1 … 일=7)는 index + 1 */
-export const RULE_DAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] as const;
-export type RuleDay = (typeof RULE_DAYS)[number];
-const DAY_LABEL: Record<RuleDay, string> = { MO: "월", TU: "화", WE: "수", TH: "목", FR: "금", SA: "토", SU: "일" };
-export const dayLabel = (d: RuleDay) => DAY_LABEL[d];
+/** 화면 요일 순서(월요일부터) */
+export const RULE_DAYS: readonly Weekday[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+export const dayLabel = (d: Weekday) => WEEKDAYS[WEEKDAY_CODES.indexOf(d)];
+export const ruleDayOf = (iso: ISODate): Weekday => WEEKDAY_CODES[parts(iso).dow];
 
+/** TodoModal 반복 입력 */
 export interface TodoRule {
-  freq: RuleFreq;
+  freq: Freq;
   interval: number;
-  byDay: RuleDay[]; // WEEKLY
-  monthDay: number | null; // MONTHLY. -1이면 말일, null이면 마감일의 날짜
+  byDay: Weekday[]; // WEEKLY
+  monthLast: boolean; // MONTHLY: true면 말일, false면 마감일의 날짜
   until: ISODate | null;
 }
 
-/** ISO 요일(월=0 … 일=6) */
-export const ruleDayOf = (iso: ISODate): RuleDay => RULE_DAYS[(parts(iso).dow + 6) % 7];
-
-export function parseRule(rrule: string | null): TodoRule | null {
+/** 저장된 rrule → 입력값. 해석할 수 없으면 null */
+export function readTodoRule(rrule: string | null): TodoRule | null {
   if (!rrule) return null;
-  const get = (k: string) => rrule.toUpperCase().match(new RegExp(`(?:^|;)${k}=([^;]+)`))?.[1];
-  const freq = get("FREQ") as RuleFreq | undefined;
-  if (!freq || !(freq in RULE_FREQS)) return null;
-  const until = get("UNTIL");
-  const monthDay = get("BYMONTHDAY");
-  return {
-    freq,
-    interval: Math.max(Number(get("INTERVAL") ?? 1) || 1, 1),
-    byDay: (get("BYDAY")?.split(",") ?? []).map((d) => d.slice(-2) as RuleDay).filter((d) => RULE_DAYS.includes(d)),
-    monthDay: monthDay ? Number(monthDay.split(",")[0]) : null,
-    until: until ? `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}` : null,
-  };
-}
-
-export function buildRule(rule: TodoRule): string {
-  const out = [`FREQ=${rule.freq}`];
-  if (rule.interval > 1) out.push(`INTERVAL=${rule.interval}`);
-  if (rule.freq === "WEEKLY" && rule.byDay.length) {
-    out.push(`BYDAY=${RULE_DAYS.filter((d) => rule.byDay.includes(d)).join(",")}`);
+  try {
+    const r = parseRRule(rrule);
+    return {
+      freq: r.freq,
+      interval: r.interval,
+      byDay: r.byDay.map((b) => b.day),
+      monthLast: r.byMonthDay[0] === -1,
+      until: r.until ? `${r.until.slice(0, 4)}-${r.until.slice(4, 6)}-${r.until.slice(6, 8)}` : null,
+    };
+  } catch (e) {
+    if (e instanceof RRuleError) return null;
+    throw e;
   }
-  if (rule.freq === "MONTHLY" && rule.monthDay != null) out.push(`BYMONTHDAY=${rule.monthDay}`);
-  if (rule.until) out.push(`UNTIL=${rule.until.replaceAll("-", "")}`);
-  return out.join(";");
 }
 
-/** "매주 수", "2주마다 월·금", "매월 말일", "매월 12일 · 12/31까지" */
-export function rruleLabel(rrule: string) {
-  const r = parseRule(rrule);
-  if (!r) return "반복";
-  const unit = { DAILY: "일", WEEKLY: "주", MONTHLY: "개월", YEARLY: "년" }[r.freq];
-  let s = r.interval > 1 ? `${r.interval}${unit}마다` : RULE_FREQS[r.freq];
-  if (r.freq === "WEEKLY" && r.byDay.length) s += ` ${RULE_DAYS.filter((d) => r.byDay.includes(d)).map(dayLabel).join("·")}`;
-  if (r.freq === "MONTHLY" && r.monthDay != null) s += r.monthDay < 0 ? " 말일" : ` ${r.monthDay}일`;
-  if (r.until) s += ` · ${shortLabel(r.until)}까지`;
-  return s;
-}
+/** 입력값 → rrule. base는 마감일(월 반복의 날짜, 주 반복의 기본 요일) */
+export const buildTodoRule = (rule: TodoRule, base: ISODate) =>
+  buildRRule({
+    freq: rule.freq,
+    interval: rule.interval,
+    byDay:
+      rule.freq === "WEEKLY"
+        ? RULE_DAYS.filter((d) => (rule.byDay.length ? rule.byDay : [ruleDayOf(base)]).includes(d)).map((day) => ({ day }))
+        : [],
+    byMonthDay: rule.freq === "MONTHLY" ? [rule.monthLast ? -1 : parts(base).d] : [],
+    until: rule.until ? rule.until.replaceAll("-", "") : undefined,
+  });
 
-const dayNumber = (iso: ISODate) => Date.UTC(parts(iso).y, parts(iso).m - 1, parts(iso).d) / 86_400_000;
-const mondayOf = (iso: ISODate) => addDays(iso, -((parts(iso).dow + 6) % 7));
-
-/** after 다음 회차 날짜. 끝났거나 해석할 수 없으면 null. DB todo_next_due와 같은 결과 */
-export function nextDue(rrule: string | null, after: ISODate): ISODate | null {
-  const r = parseRule(rrule);
-  if (!r) return null;
-  let next: ISODate | null = null;
-
-  if (r.freq === "DAILY") next = addDays(after, r.interval);
-  else if (r.freq === "WEEKLY") {
-    if (!r.byDay.length) next = addDays(after, 7 * r.interval);
-    else {
-      const base = dayNumber(mondayOf(after));
-      for (let k = 1; k <= 7 * r.interval + 7 && !next; k++) {
-        const d = addDays(after, k);
-        const weeks = (dayNumber(mondayOf(d)) - base) / 7;
-        if (r.byDay.includes(ruleDayOf(d)) && weeks % r.interval === 0) next = d;
-      }
-    }
-  } else {
-    const { y, m, d } = parts(after);
-    const day = r.monthDay ?? d;
-    const step = r.interval * (r.freq === "YEARLY" ? 12 : 1);
-    for (let k = 0; k <= 2 && !next; k++) {
-      const last = parts(isoDate(y, m + k * step + 1, 0)).d;
-      const cand = isoDate(y, m + k * step, day < 0 || day > last ? last : day);
-      if (cand > after) next = cand;
-    }
+/** "매주 수요일", "2주마다 월·금", "매월 마지막 날 · 2026년 12월 31일까지". 해석할 수 없으면 "반복" */
+export function rruleLabel(rrule: string, dtstart?: ISODate) {
+  try {
+    return describeRRule(rrule, dtstart);
+  } catch (e) {
+    if (e instanceof RRuleError) return "반복";
+    throw e;
   }
-
-  return next && r.until && next > r.until ? null : next;
 }
+
+/** after 다음 회차(완료하면 생길 날짜). DB todo_next_due와 같다 */
+export const nextDue = (rrule: string | null, after: ISODate) => (rrule ? todoNextDue(rrule, after) : null);
+
