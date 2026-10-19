@@ -417,3 +417,7 @@ enabled = true
 # 세션 04: 사용자 JWT는 함수 안에서 확인하고, pg_cron 호출은 x-cron-secret 으로 확인한다.
 [functions.gcal-sync]
 verify_jwt = false
+
+# 세션 05: PAT(Bearer lm_mcp_…)를 함수가 직접 확인한다.
+[functions.mcp-api]
+verify_jwt = false

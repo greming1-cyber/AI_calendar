@@ -543,6 +543,7 @@ export type Database = {
           created_at: string
           day_of_month: number
           id: string
+          last_generated_on: string | null
           memo: string
           payment_method_id: string | null
           type: string
@@ -556,6 +557,7 @@ export type Database = {
           created_at?: string
           day_of_month: number
           id?: string
+          last_generated_on?: string | null
           memo?: string
           payment_method_id?: string | null
           type: string
@@ -569,6 +571,7 @@ export type Database = {
           created_at?: string
           day_of_month?: number
           id?: string
+          last_generated_on?: string | null
           memo?: string
           payment_method_id?: string | null
           type?: string
@@ -861,6 +864,12 @@ export type Database = {
     }
     Functions: {
       complete_todo: { Args: { p_done?: boolean; p_id: string }; Returns: Json }
+      generate_recurring_core: {
+        Args: { p_today: string; p_uid: string }
+        Returns: number
+      }
+      generate_recurring_transactions: { Args: never; Returns: number }
+      generate_recurring_transactions_all: { Args: never; Returns: number }
       get_google_refresh_token: {
         Args: { p_account_id: string }
         Returns: string
