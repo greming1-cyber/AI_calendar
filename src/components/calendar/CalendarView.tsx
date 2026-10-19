@@ -5,6 +5,7 @@ import { CardHead, Segmented, useToast } from "@/components/ui";
 import { addDays, longLabel, parts, zonedParts } from "@/lib/date";
 import { won } from "@/lib/format";
 import { categoryColorOf, useEventCategories, useEvents, useRecurringPayments, useSaveEvent } from "@/lib/hooks/use-events";
+import { useGoogleCalendars } from "@/lib/hooks/use-google";
 import { useProfile, useTimezone } from "@/lib/hooks/use-profile";
 import { useToday } from "@/lib/hooks/use-today";
 import { useTodos } from "@/lib/hooks/use-todos";
@@ -121,7 +122,10 @@ export function CalendarView() {
   const saveMutation = useSaveEvent();
 
   const events = eventsQuery.data ?? [];
-  const color = (name: string) => categoryColorOf(categories, name);
+  const { data: googleCalendars = [] } = useGoogleCalendars();
+  // GCAL-07: 구글 일정은 저장 캘린더 색, 그 밖에는 카테고리 색
+  const color = (e: CalendarEvent) =>
+    (e.source === "google" && googleCalendars.find((c) => c.id === e.googleCalendarId)?.color) || categoryColorOf(categories, e.category);
   // TODO(04): useWeather()로 바꾼다. 지금은 예시 예보다.
   const weather = dailyWeather(todayIso);
 
@@ -316,7 +320,7 @@ export function CalendarView() {
           {eventsQuery.isSuccess && !selEvents.length && <span className="py-3 text-[13px] text-subtle">등록된 일정이 없어요.</span>}
           {selEvents.map((e) => (
             <button key={e.id} type="button" onClick={() => openEvent(e)} className="grid grid-cols-[4px_1fr] gap-3 border-b border-line py-2.5 text-left">
-              <div className="rounded-xs" style={{ background: color(e.category) }} />
+              <div className="rounded-xs" style={{ background: color(e) }} />
               <div className="flex min-w-0 flex-col gap-[3px]">
                 <span className="text-[15px] font-semibold">{e.title}</span>
                 <span className="text-xs text-muted">

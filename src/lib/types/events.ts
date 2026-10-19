@@ -40,6 +40,8 @@ export interface CalendarEvent {
   seriesId: string | null;
   /** 예외 일정이 대체하는 원래 회차 날짜, 펼친 회차는 그 회차 날짜 */
   occurrenceDate: ISODate | null;
+  /** 구글 일정의 저장 캘린더(google_calendars.id, GCAL-06). 등록할 때 비우면 기본 캘린더로 보낸다 */
+  googleCalendarId?: string | null;
 }
 
 /** 등록·수정 입력. endDate·rrule을 생략하면 하루짜리, repeat에서 만든 규칙으로 저장한다 */
