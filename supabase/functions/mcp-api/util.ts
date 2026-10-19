@@ -227,15 +227,15 @@ const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
 
 /**
  * 이름이 같은 항목(공백·대소문자 무시)을 찾는다. 없으면 만들지 않고 NOT_FOUND와 후보 이름을 돌려준다.
- * 후보는 이름이 겹치는 것을 앞에 둔다.
+ * 후보는 이름이 서로 포함되는 것, 없으면 전체 목록이다(웹 앱 transactions.ts findCategoryByName과 같은 규칙).
  */
 export function findByName<T extends { name: string }>(list: T[], name: string, label: string): T {
   const key = norm(name);
   const hit = list.find((x) => norm(x.name) === key);
   if (hit) return hit;
   const close = list.filter((x) => norm(x.name).includes(key) || key.includes(norm(x.name)));
-  const candidates = [...new Set([...close, ...list].map((x) => x.name))];
-  throw new ApiError("NOT_FOUND", `"${name}" ${label}이(가) 없습니다. 새로 만들지 않습니다.`, candidates);
+  const candidates = [...new Set((close.length ? close : list).map((x) => x.name))];
+  throw new ApiError("NOT_FOUND", `${label} "${name}"을(를) 찾을 수 없습니다. 새로 만들지 않으니 후보 중에서 고르거나 사용자에게 물어보세요.`, candidates);
 }
 
 export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
