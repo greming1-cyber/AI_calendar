@@ -5,7 +5,7 @@ import { CardHead, Segmented, useToast } from "@/components/ui";
 import { addDays, longLabel, parts, zonedParts } from "@/lib/date";
 import { won } from "@/lib/format";
 import { categoryColorOf, useEventCategories, useEvents, useRecurringPayments, useSaveEvent } from "@/lib/hooks/use-events";
-import { useGoogleCalendars } from "@/lib/hooks/use-google";
+import { useAutoGoogleSync, useGoogleCalendars } from "@/lib/hooks/use-google";
 import { useProfile, useTimezone } from "@/lib/hooks/use-profile";
 import { useToday } from "@/lib/hooks/use-today";
 import { useTodos } from "@/lib/hooks/use-todos";
@@ -123,6 +123,8 @@ export function CalendarView() {
 
   const events = eventsQuery.data ?? [];
   const { data: googleCalendars = [] } = useGoogleCalendars();
+  // 캘린더를 열면 구글 일정을 가져온다(마지막 동기화 2분 경과 시).
+  const googleSyncing = useAutoGoogleSync();
   // GCAL-07: 구글 일정은 저장 캘린더 색, 그 밖에는 카테고리 색
   const color = (e: CalendarEvent) =>
     (e.source === "google" && googleCalendars.find((c) => c.id === e.googleCalendarId)?.color) || categoryColorOf(categories, e.category);
@@ -265,6 +267,7 @@ export function CalendarView() {
       <section className="card card-flat min-w-0 flex-[1_1_560px] gap-3.5 p-3 sm:p-5">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <span className="text-xl font-bold sm:text-2xl">{viewTitle(view, anchor, weekStart)}</span>
+          {googleSyncing && <span className="text-[11px] text-subtle">Google 동기화 중…</span>}
           <div className="flex gap-1.5">
             <button type="button" aria-label="이전" onClick={() => move(-1)} className="pill size-[30px] justify-center p-0 text-[13px]">
               ‹

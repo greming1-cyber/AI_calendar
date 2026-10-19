@@ -6,7 +6,7 @@ import { CardHead, ErrorState, LoadingState, ProgressBar, useToast } from "@/com
 import { addDays, isoDate, monthKey, parts, weekday } from "@/lib/date";
 import { pct, timeAgo, won } from "@/lib/format";
 import { useEvents } from "@/lib/hooks/use-events";
-import { useGoogleStatus } from "@/lib/hooks/use-google";
+import { useAutoGoogleSync, useGoogleStatus } from "@/lib/hooks/use-google";
 import { useToday } from "@/lib/hooks/use-today";
 import { useProjects, useTodos, useToggleTodo } from "@/lib/hooks/use-todos";
 import { useBudgets, useTransactions } from "@/lib/hooks/use-transactions";
@@ -35,11 +35,15 @@ export function HomeDashboard() {
   // HOME-01: 날씨는 홈 전체 로딩을 막지 않는다(실패해도 카드 안에서만 알린다).
   const weather = useWeather();
   const google = useGoogleStatus().data;
+  // 홈을 열면 구글 일정을 가져온다(마지막 동기화 2분 경과 시).
+  const googleSyncing = useAutoGoogleSync();
   const googleMeta = !google?.connected
     ? "Google 미연결"
     : google.reauthRequired
       ? "Google 다시 연결 필요"
-      : `Google 동기화 · ${timeAgo(google.lastSyncedAt)}`;
+      : googleSyncing
+        ? "Google 동기화 중…"
+        : `Google 동기화 · ${timeAgo(google.lastSyncedAt)}`;
 
   // 오늘 할 일 목록은 처음 읽었을 때의 미완료 항목으로 고정해, 체크해도 목록에서 사라지지 않게 한다.
   const [homeTodoIds, setHomeTodoIds] = useState<string[] | null>(null);
