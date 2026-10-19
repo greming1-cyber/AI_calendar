@@ -73,6 +73,7 @@ export function toEvent(row: EventRow, tz: string = DEFAULT_TZ): CalendarEvent {
     memo: row.memo,
     seriesId: row.recurrence_parent_id,
     occurrenceDate: row.original_date,
+    googleCalendarId: row.google_calendar_id,
   };
 }
 
@@ -114,6 +115,8 @@ export function fromEventInput(input: EventInput, categories: EventCategory[], t
     reminder_minutes: REMINDER_MINUTES[input.reminder],
     // 구글 캘린더 반영(GCAL-05·06)은 04 세션이 source='google'이고 google_event_id가 없는 일정을 내보낸다.
     source: input.source,
+    // 저장 캘린더를 고르지 않은 구글 일정은 동기화가 기본 캘린더로 보낸다.
+    ...(input.source === "google" && input.googleCalendarId ? { google_calendar_id: input.googleCalendarId } : {}),
   };
 }
 
@@ -246,7 +249,7 @@ const removeSeries = async (row: EventRow) => removeRows(row, [row.id, ...(await
  * - this: 원본 exdates에 회차를 넣고 예외 일정(recurrence_parent_id, original_date)을 만든다.
  * - following: 원본을 회차 전날까지로 줄이고(splitRRule) 회차부터 새 시리즈를 만든다. 이후 예외 일정은 새 시리즈로 옮긴다.
  * - all: 원본을 고친다. 회차 날짜를 옮겼으면 시리즈 시작일·exdates·예외 일정도 같은 만큼 옮긴다.
- * 예외 일정은 그 일정만 고친다. 출처(source)는 바꾸지 않는다.
+ * 예외 일정은 그 일정만 고친다. 출처(source)와 구글 저장 캘린더는 바꾸지 않고, 새로 만드는 행은 원본 것을 물려받는다.
  */
 export async function updateEvent(
   id: string,
@@ -257,8 +260,10 @@ export async function updateEvent(
 ) {
   const { rowId, date } = parseEventId(id);
   const row = await getRow(rowId);
-  const { source, ...values } = fromEventInput(input, categories, tz);
+  const { source, google_calendar_id, ...values } = fromEventInput(input, categories, tz);
   void source;
+  void google_calendar_id;
+  const origin = { source: row.source, google_calendar_id: row.google_calendar_id };
 
   if (!row.rrule || row.recurrence_parent_id) {
     // 예외 일정은 반복 규칙을 갖지 않는다.
@@ -274,7 +279,7 @@ export async function updateEvent(
   if (scope === "this") {
     const { error } = await supabase
       .from("events")
-      .insert({ ...values, rrule: null, source: row.source, recurrence_parent_id: row.id, original_date: occ });
+      .insert({ ...values, ...origin, rrule: null, recurrence_parent_id: row.id, original_date: occ });
     if (error) throw error;
     await update(row.id, { exdates: [...new Set([...row.exdates, occ])] });
     return;
@@ -288,10 +293,10 @@ export async function updateEvent(
     const shifted = fromEventInput({ ...input, date: start, endDate: addDays(input.endDate ?? input.date, diffDays(input.date, start)) }, categories, tz);
     if (!shifted.rrule) {
       await removeRows(row, (await children(row.id)).map((c) => c.id));
-      await update(row.id, { ...shifted, source: row.source, exdates: [] });
+      await update(row.id, { ...shifted, ...origin, exdates: [] });
       return;
     }
-    await update(row.id, { ...shifted, source: row.source, exdates: row.exdates.map((d) => addDays(d, delta)) });
+    await update(row.id, { ...shifted, ...origin, exdates: row.exdates.map((d) => addDays(d, delta)) });
     if (delta) for (const c of await children(row.id)) await update(c.id, { original_date: addDays(c.original_date!, delta) });
     return;
   }
@@ -303,7 +308,7 @@ export async function updateEvent(
     .insert({
       ...values,
       rrule,
-      source: row.source,
+      ...origin,
       exdates: rrule ? row.exdates.filter((d) => d >= occ).map((d) => addDays(d, delta)) : [],
     })
     .select("id")

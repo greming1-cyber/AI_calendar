@@ -105,3 +105,37 @@ P0 → P1 → P2 순서로 진행하고, 단계마다 완료 기준을 확인해
 
 ## 9. 요청 사항
 (다른 세션에 요청할 내용이나 받은 요청을 여기에 적는다)
+
+## 10. 구현 결과 (feat/money)
+
+### 고정지출 자동 생성 방식 (TX-07)
+DB 함수 + pg_cron을 함께 쓴다. 마이그레이션 `20261019120000_money_recurring.sql`.
+- `recurring_transactions.last_generated_on`: 어디까지 만들었는지. null이면 등록일(사용자 타임존)부터 센다. 생성된 내역을 지워도 다시 만들지 않는다.
+- `transactions (recurring_id, occurred_on)` 부분 유니크 인덱스(`where recurring_id is not null`)와 `on conflict do nothing`으로 중복을 막는다.
+- `generate_recurring_transactions()`: 로그인 사용자용(security invoker, RLS). 가계부 화면을 열 때(`useGenerateRecurring`)와 고정지출 저장 직후 부른다.
+- `generate_recurring_transactions_all()`: pg_cron 잡 `money-recurring`이 매시 10분에 실행(security definer, service_role만 실행). 사용자마다 자기 타임존의 오늘까지 만들므로 매시 돌아도 멱등이다.
+- 공통 로직 `generate_recurring_core(uid, today)`: 남의 uid는 거부하고, 로그인 사용자가 넘긴 today는 그 사람의 오늘로 제한한다.
+- 결제일이 그 달에 없으면(31일 등) 말일에 만든다. 꺼 둔 고정지출을 다시 켜면 오늘부터 다시 센다.
+- 내역 등록 모달의 "매월 반복"을 켜면 같은 내용의 고정지출을 만들고 그 내역을 첫 회차로 묶는다.
+
+### 제공 계약
+- `TransactionModal` `{ open, onClose, initial?: Partial<TransactionInput>, transaction? }` — `components/money/TransactionModal.tsx`
+- `listTransactions(from, to, filter?)`, `useTransactions(range, filter?)` — filter는 `TxFilter { type, categoryIds, paymentMethodIds, keyword }`
+- `findCategoryByName(name, type?)`, `findPaymentMethodByName(name)` → `{ match, candidates }` (없으면 새로 만들지 않고 후보 반환)
+- `listRecurringTransactions()`(사용 중), `listAllRecurringTransactions()`(전체)
+- `lib/money.ts` 추가: `compareToPrevMonth`, `budgetLevel`, `monthlySeries`, `transactionsCsv`. 기존 함수 시그니처는 그대로다.
+- 예산: `listBudgets`(항목에 `categoryId` 추가), `upsertBudget(month, categoryId | null, amount | null)`, `saveMonthBudgets`, `copyBudgets`
+
+### 화면
+- 머리: 월 이동, 일별/월별, 필터, 예산, 관리, + 내역
+- 필터 패널(기간·구분·분류 복수·결제수단 복수·키워드). 적용 중인 필터는 알약으로 보이고 하나씩 뺄 수 있다. 합계·분류별 지출·CSV가 필터 결과를 따른다.
+- 예산 모달(월 전체·분류별, 지난달 복사), 관리 모달(지출 분류·수입 분류·결제수단·고정지출 탭, 순서 변경, 삭제 시 옮길 곳 선택)
+- 월별 보기: 그해 12개월 합계 표(월을 누르면 일별), 보고 있는 달까지 6개월 추이
+
+### 완료 기준 확인
+- [x] 내역 등록·수정·삭제 후 월 합계·잔액·예산 사용률이 즉시 갱신된다(수정·삭제는 낙관적 업데이트, 저장 후 `['transactions']`·`['budgets']` 무효화).
+- [x] 필터를 적용하면 목록과 합계가 함께 바뀐다.
+- [x] 고정지출을 등록하면 해당일에 내역이 한 번만 생긴다(테스트 계정에서 rpc 두 번 호출 → 1건, 0건. 지운 뒤 재호출 0건).
+- [x] 월별 보기와 6개월 추이가 실데이터로 그려진다.
+- [ ] 다운로드한 CSV를 엑셀에서 열어 보는 확인은 사람이 해야 한다(UTF-8 BOM, CRLF, 수식 주입 방지 `'` 접두어).
+- [x] `npm run build`, `npm run lint` 통과.

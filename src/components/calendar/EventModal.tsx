@@ -5,7 +5,7 @@ import { Modal, useToast } from "@/components/ui";
 import { addDays, diffDays, longLabel, parts } from "@/lib/date";
 import { won } from "@/lib/format";
 import { useDeleteEvent, useEventCategories, useLinkedItems, useSaveEvent } from "@/lib/hooks/use-events";
-import { useGoogleStatus } from "@/lib/hooks/use-google";
+import { useGoogleCalendars, useGoogleStatus } from "@/lib/hooks/use-google";
 import { useProfile, useTimezone } from "@/lib/hooks/use-profile";
 import { useToday } from "@/lib/hooks/use-today";
 import { dailyWeather } from "@/lib/mock-data";
@@ -44,6 +44,7 @@ const fromEvent = (e: CalendarEvent): Form => ({
   repeat: e.repeat,
   reminder: e.reminder,
   memo: e.memo,
+  googleCalendarId: e.googleCalendarId ?? null,
 });
 
 /** 반복 회차(원본에서 펼친 것)인지. 예외 일정은 seriesId가 있어도 회차가 아니다 */
@@ -82,6 +83,7 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
   const deleteMutation = useDeleteEvent();
   const googleStatus = useGoogleStatus().data;
   const googleConnected = Boolean(googleStatus?.connected && !googleStatus.reauthRequired);
+  const googleCalendars = useGoogleCalendars();
 
   const [f, setF] = useState<Form>(() => (event ? fromEvent(event) : blank(initial?.date ?? today, initial)));
   const [repeat, setRepeat] = useState<RepeatState>(() =>
@@ -92,9 +94,15 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
 
   const category = f.category || categories.find((c) => c.name === "개인")?.name || categories[0]?.name || "";
   const busy = saveMutation.isPending || deleteMutation.isPending;
-  const timeInvalid = !f.allDay && f.endDate === f.date && Boolean(f.end) && f.end <= f.start;
-  const valid = f.title.trim().length > 0 && !timeInvalid;
   const editing = Boolean(event);
+  // GCAL-06: 내보낼 수 있는(켜져 있고 가져오기 전용이 아닌 쓰기 가능) 캘린더만 고른다. 기본값은 기본 캘린더.
+  const exportable = (googleCalendars.data ?? []).filter((c) => c.writable && c.enabled && c.direction !== "import");
+  const googleCalendarId = editing
+    ? (f.googleCalendarId ?? null)
+    : (exportable.find((c) => c.id === f.googleCalendarId) ?? exportable.find((c) => c.isPrimary) ?? exportable[0])?.id ?? null;
+  const noExportable = !editing && f.source === "google" && googleCalendars.isSuccess && !exportable.length;
+  const timeInvalid = !f.allDay && f.endDate === f.date && Boolean(f.end) && f.end <= f.start;
+  const valid = f.title.trim().length > 0 && !timeInvalid && !noExportable;
   const exception = isException(event);
   const rrule = exception ? null : repeatToRRule(repeat, f.date, { allDay: f.allDay, tz });
   const ruleChanged = Boolean(event) && rrule !== (event?.rrule ?? null);
@@ -114,6 +122,7 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
     start: f.allDay ? "" : f.start,
     end: f.allDay ? "" : f.end,
     rrule,
+    googleCalendarId: f.source === "google" ? googleCalendarId : null,
   });
 
   const doSave = (scope?: RecurrenceScope) => {
@@ -307,7 +316,39 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
             {(googleConnected || f.source === "google") && <option value="google">구글 캘린더</option>}
           </select>
         </label>
+        {f.source === "google" && (
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-muted">
+            구글 캘린더
+            {/* 수정할 때는 저장된 캘린더를 보여 주기만 한다(캘린더 이동은 지원하지 않음). */}
+            {editing ? (
+              <select value={googleCalendarId ?? ""} disabled className="field disabled:opacity-60">
+                <option value={googleCalendarId ?? ""}>
+                  {(googleCalendars.data ?? []).find((c) => c.id === googleCalendarId)?.name ?? (googleCalendarId ? "구글 캘린더" : "기본 캘린더")}
+                </option>
+              </select>
+            ) : (
+              <select
+                value={googleCalendarId ?? ""}
+                disabled={!exportable.length}
+                onChange={(e) => set("googleCalendarId", e.target.value)}
+                className="field disabled:opacity-60"
+              >
+                {googleCalendars.isPending && <option value="">불러오는 중…</option>}
+                {noExportable && <option value="">내보낼 캘린더 없음</option>}
+                {exportable.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.isPrimary ? " (기본)" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+        )}
       </div>
+      {noExportable && (
+        <span className="text-xs text-danger">내보낼 수 있는 구글 캘린더가 없어요. 설정 → 구글 캘린더에서 캘린더를 켜 주세요.</span>
+      )}
 
       <label className="flex min-w-0 flex-col gap-1.5 text-xs text-muted">
         메모
