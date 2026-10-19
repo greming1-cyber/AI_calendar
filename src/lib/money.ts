@@ -77,6 +77,45 @@ export const prevMonthSamePeriodExpense = (txs: Transaction[], today: ISODate) =
   return txs.filter((t) => t.type === "expense" && t.date >= from && t.date <= to).reduce((s, t) => s + t.amount, 0);
 };
 
+/**
+ * 전월 같은 기간 대비 지출 증감. current는 이번 달 1일~오늘, prev는 지난 달 1일~같은 날짜.
+ * changePct는 소수 첫째 자리 퍼센트, 지난 달 지출이 없으면 null
+ */
+export const compareToPrevMonth = (txs: Transaction[], today: ISODate) => {
+  const { y, m } = parts(today);
+  const from = isoDate(y, m, 1);
+  const current = txs.filter((t) => t.type === "expense" && t.date >= from && t.date <= today).reduce((s, t) => s + t.amount, 0);
+  const prev = prevMonthSamePeriodExpense(txs, today);
+  return { current, prev, changePct: prev ? Math.round(((current - prev) / prev) * 1000) / 10 : null };
+};
+
+/** 예산 사용률 단계: 80% 이상 주의, 100% 이상 초과 */
+export const budgetLevel = (ratio: number): "ok" | "warn" | "over" =>
+  ratio >= 1 ? "over" : ratio >= BUDGET_WARN ? "warn" : "ok";
+
+/** start(y, m)부터 n개월의 월별 합계(월별 보기·추이) */
+export const monthlySeries = (txs: Transaction[], y: number, m: number, n: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const t = shiftMonth(y, m, i);
+    const { income, expense, balance, list } = monthTotals(txs, t.y, t.m);
+    return { y: t.y, m: t.m, income, expense, balance, count: list.length };
+  });
+
+const csvCell = (v: string | number) => {
+  // 글자 칸이 =, +, -, @로 시작하면 엑셀이 수식으로 읽으므로 앞에 '를 붙인다.
+  const s = typeof v === "string" && /^[=+\-@\t\r]/.test(v) ? `'${v}` : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+/** SET-04: 내역 CSV. 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM을 붙인다. 날짜 오름차순 */
+export const transactionsCsv = (txs: Transaction[]) => {
+  const header = ["날짜", "구분", "분류", "결제수단", "메모", "금액"];
+  const rows = [...txs]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((t) => [t.date, t.type === "income" ? "수입" : "지출", t.category, t.method, t.memo, t.type === "income" ? t.amount : -t.amount]);
+  return "﻿" + [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+};
+
 /** 고정지출의 다음 결제일(오늘 이후, 이번 달 또는 다음 달). 말일을 넘는 날짜는 그 달 말일로 */
 export const nextOccurrence = (r: RecurringTransaction, today: ISODate): ISODate => {
   const { y, m } = parts(today);
