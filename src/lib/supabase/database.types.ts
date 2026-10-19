@@ -311,6 +311,7 @@ export type Database = {
       mcp_audit_logs: {
         Row: {
           args: Json | null
+          client_id: string | null
           created_at: string
           id: string
           result_summary: string | null
@@ -322,6 +323,7 @@ export type Database = {
         }
         Insert: {
           args?: Json | null
+          client_id?: string | null
           created_at?: string
           id?: string
           result_summary?: string | null
@@ -333,6 +335,7 @@ export type Database = {
         }
         Update: {
           args?: Json | null
+          client_id?: string | null
           created_at?: string
           id?: string
           result_summary?: string | null
@@ -351,6 +354,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      mcp_oauth_grants: {
+        Row: {
+          client_id: string
+          client_name: string
+          created_at: string
+          id: string
+          last_used_at: string | null
+          redirect_host: string
+          revoked_at: string | null
+          scopes: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          redirect_host?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          client_id?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          last_used_at?: string | null
+          redirect_host?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       mcp_tokens: {
         Row: {
