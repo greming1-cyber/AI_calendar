@@ -1,20 +1,12 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { MCP_SCOPES, type McpScope } from "../scopes";
 import { createClient } from "@/lib/supabase/server";
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/** 랜덤 32바이트를 base62로(약 43자) */
-function base62(bytes: Buffer) {
-  let n = BigInt(`0x${bytes.toString("hex")}`);
-  let out = "";
-  while (n > 0n) {
-    out = BASE62[Number(n % 62n)] + out;
-    n /= 62n;
-  }
-  return out.padStart(43, "0");
-}
+/** 32바이트(256비트)만큼의 무작위 base62 문자열: 43자 × log2(62) ≈ 256비트. randomInt는 치우침이 없다 */
+const randomBase62 = () => Array.from({ length: 43 }, () => BASE62[randomInt(62)]).join("");
 
 /**
  * MCP-01·02: 개인 액세스 토큰 발급. body: { name, scopes }
@@ -34,7 +26,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "권한을 하나 이상 골라 주세요." }, { status: 400 });
   }
 
-  const body62 = base62(randomBytes(32));
+  const body62 = randomBase62();
   const token = `lm_mcp_${body62}`;
   const { data: row, error } = await supabase
     .from("mcp_tokens")
