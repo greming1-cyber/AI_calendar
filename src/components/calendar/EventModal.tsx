@@ -5,6 +5,7 @@ import { Modal, useToast } from "@/components/ui";
 import { addDays, diffDays, longLabel, parts } from "@/lib/date";
 import { won } from "@/lib/format";
 import { useDeleteEvent, useEventCategories, useLinkedItems, useSaveEvent } from "@/lib/hooks/use-events";
+import { useGoogleStatus } from "@/lib/hooks/use-google";
 import { useProfile, useTimezone } from "@/lib/hooks/use-profile";
 import { useToday } from "@/lib/hooks/use-today";
 import { dailyWeather } from "@/lib/mock-data";
@@ -79,6 +80,8 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
   const { data: categories = [] } = useEventCategories();
   const saveMutation = useSaveEvent();
   const deleteMutation = useDeleteEvent();
+  const googleStatus = useGoogleStatus().data;
+  const googleConnected = Boolean(googleStatus?.connected && !googleStatus.reauthRequired);
 
   const [f, setF] = useState<Form>(() => (event ? fromEvent(event) : blank(initial?.date ?? today, initial)));
   const [repeat, setRepeat] = useState<RepeatState>(() =>
@@ -300,7 +303,8 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
             className="field disabled:opacity-60"
           >
             <option value="local">내 서비스</option>
-            <option value="google">구글 캘린더</option>
+            {/* 구글이 연결돼 있을 때만 고를 수 있다. 새 구글 일정은 기본 캘린더로 보낸다. */}
+            {(googleConnected || f.source === "google") && <option value="google">구글 캘린더</option>}
           </select>
         </label>
       </div>

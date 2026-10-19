@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { CardHead, ErrorState, LoadingState, ProgressBar, useToast } from "@/components/ui";
 import { addDays, isoDate, monthKey, parts, weekday } from "@/lib/date";
-import { pct, won } from "@/lib/format";
+import { pct, timeAgo, won } from "@/lib/format";
 import { useEvents } from "@/lib/hooks/use-events";
+import { useGoogleStatus } from "@/lib/hooks/use-google";
 import { useToday } from "@/lib/hooks/use-today";
 import { useProjects, useTodos, useToggleTodo } from "@/lib/hooks/use-todos";
 import { useBudgets, useTransactions } from "@/lib/hooks/use-transactions";
-import { CURRENT_WEATHER, GOOGLE_SYNC, PROFILE } from "@/lib/mock-data";
+import { CURRENT_WEATHER, PROFILE } from "@/lib/mock-data";
 import { BUDGET_WARN, budgetStatus, dailyExpense, monthTotals, recentDays } from "@/lib/money";
 import { dueLabel, isOverdue, projectProgress } from "@/lib/todo";
 import { HeroBackground, HeroControls } from "./HeroBackground";
@@ -30,6 +31,12 @@ export function HomeDashboard() {
   const txQuery = useTransactions({ from: weekStart < monthStart ? weekStart : monthStart, to: today });
   const budgetsQuery = useBudgets(monthKey(y, m));
   const toggle = useToggleTodo();
+  const google = useGoogleStatus().data;
+  const googleMeta = !google?.connected
+    ? "Google 미연결"
+    : google.reauthRequired
+      ? "Google 다시 연결 필요"
+      : `Google 동기화 · ${timeAgo(google.lastSyncedAt)}`;
 
   // 오늘 할 일 목록은 처음 읽었을 때의 미완료 항목으로 고정해, 체크해도 목록에서 사라지지 않게 한다.
   const [homeTodoIds, setHomeTodoIds] = useState<string[] | null>(null);
@@ -200,7 +207,7 @@ export function HomeDashboard() {
 
           {/* 오늘의 일정 (HOME-02) */}
           <section className="card card-glass gap-2.5">
-            <CardHead title="오늘의 일정" meta={`Google 동기화 · ${GOOGLE_SYNC.lastSynced}`} />
+            <CardHead title="오늘의 일정" meta={googleMeta} />
             {allDay.map((e) => (
               <div key={e.id} className="rounded-[10px] bg-white/[.08] px-3 py-[7px] text-xs">
                 종일 · {e.title} · {e.category}

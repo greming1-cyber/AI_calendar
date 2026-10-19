@@ -1,12 +1,10 @@
 // 아직 실데이터가 없는 영역(날씨·구글 연동·MCP)의 예시 데이터.
 // 일정·할일·가계부는 Supabase에서 읽는다(시안 데이터는 DB 함수 seed_demo로 채운다).
-// TODO(04): 날씨·구글 예시 제거  TODO(05): MCP 예시 제거  TODO(06): 이 파일 삭제
+// TODO(04): 날씨 예시 제거  TODO(05): MCP 예시 제거  TODO(06): 이 파일 삭제
 import { addDays } from "./date";
 import type { ISODate, McpLog } from "./types";
 
 export const PROFILE = {
-  googleEmail: "jihoon.kim@gmail.com",
-  workEmail: "jihoon.kim@company.com",
   region: "서울특별시 마포구",
   regionShort: "마포구",
 };
@@ -47,8 +45,6 @@ export const CURRENT_WEATHER = {
     { time: "00", temp: 12 },
   ],
 };
-
-export const GOOGLE_SYNC = { lastSynced: "3분 전" };
 
 export const MCP_TOKEN = {
   masked: "lm_mcp_••••••••••••7f3a",

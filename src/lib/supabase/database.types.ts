@@ -1,7 +1,3 @@
-// TODO(00): Supabase 프로젝트가 생기면 아래 명령으로 다시 생성하고 이 주석을 지운다.
-//   npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
-// 지금은 supabase/migrations/0001_init.sql을 로컬 Postgres(PGlite)에 적용해 같은 형식으로 만든 임시본이다.
-
 export type Json =
   | string
   | number
@@ -14,7 +10,32 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.18"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -95,8 +116,10 @@ export type Database = {
           end_at: string | null
           exdates: string[]
           google_calendar_id: string | null
+          google_dirty: boolean
           google_etag: string | null
           google_event_id: string | null
+          google_updated_at: string | null
           id: string
           location: string
           memo: string
@@ -118,8 +141,10 @@ export type Database = {
           end_at?: string | null
           exdates?: string[]
           google_calendar_id?: string | null
+          google_dirty?: boolean
           google_etag?: string | null
           google_event_id?: string | null
+          google_updated_at?: string | null
           id?: string
           location?: string
           memo?: string
@@ -141,8 +166,10 @@ export type Database = {
           end_at?: string | null
           exdates?: string[]
           google_calendar_id?: string | null
+          google_dirty?: boolean
           google_etag?: string | null
           google_event_id?: string | null
+          google_updated_at?: string | null
           id?: string
           location?: string
           memo?: string
@@ -186,8 +213,11 @@ export type Database = {
           created_at: string
           google_email: string
           id: string
+          last_error: string | null
+          last_synced_at: string | null
           refresh_token_secret_id: string | null
           status: string
+          sync_started_at: string | null
           updated_at: string
           user_id: string
         }
@@ -196,8 +226,11 @@ export type Database = {
           created_at?: string
           google_email: string
           id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
           refresh_token_secret_id?: string | null
           status?: string
+          sync_started_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -206,8 +239,11 @@ export type Database = {
           created_at?: string
           google_email?: string
           id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
           refresh_token_secret_id?: string | null
           status?: string
+          sync_started_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -215,12 +251,14 @@ export type Database = {
       }
       google_calendars: {
         Row: {
+          access_role: string
           calendar_id: string
           color: string | null
           created_at: string
           enabled: boolean
           google_account_id: string
           id: string
+          is_primary: boolean
           last_synced_at: string | null
           name: string
           sync_direction: string
@@ -229,12 +267,14 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          access_role?: string
           calendar_id: string
           color?: string | null
           created_at?: string
           enabled?: boolean
           google_account_id: string
           id?: string
+          is_primary?: boolean
           last_synced_at?: string | null
           name: string
           sync_direction?: string
@@ -243,12 +283,14 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          access_role?: string
           calendar_id?: string
           color?: string | null
           created_at?: string
           enabled?: boolean
           google_account_id?: string
           id?: string
+          is_primary?: boolean
           last_synced_at?: string | null
           name?: string
           sync_direction?: string
@@ -818,9 +860,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      seed_demo: {
-        Args: { uid: string }
+      complete_todo: { Args: { p_done?: boolean; p_id: string }; Returns: Json }
+      get_google_refresh_token: {
+        Args: { p_account_id: string }
+        Returns: string
+      }
+      invoke_gcal_sync: { Args: never; Returns: undefined }
+      seed_demo: { Args: { uid: string }; Returns: undefined }
+      set_gcal_cron_config: {
+        Args: { p_secret: string; p_url: string }
         Returns: undefined
+      }
+      set_google_refresh_token: {
+        Args: { p_account_id: string; p_token: string }
+        Returns: undefined
+      }
+      todo_next_due: {
+        Args: { p_after: string; p_rrule: string }
+        Returns: string
       }
     }
     Enums: {
@@ -840,12 +897,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -869,11 +926,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -894,11 +951,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -915,7 +972,44 @@ export type TablesUpdate<
       : never
     : never
 
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

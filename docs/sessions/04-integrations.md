@@ -149,3 +149,21 @@ Google·기상청 키는 내가 준비해서 알려줄게. 날씨(5.3)부터 시
 
 ## 9. 요청 사항
 (다른 세션에 요청할 내용이나 받은 요청을 여기에 적는다)
+
+## 10. 구현 기록 — 구글 (2026-10-19, main 작업 폴더에서 진행)
+
+구현: 5.1 연결·해제·재연결, 5.2 가져오기·내보내기·충돌·15분 주기, 5.4 `useGoogleStatus`·`useGoogleCalendars`·`GoogleTab`, 홈 동기화 표시. 날씨(5.3)는 아직이다.
+
+| 파일 | 내용 |
+|---|---|
+| `supabase/migrations/20261019100000_gcal_sync.sql` | `events.google_dirty`·`google_updated_at`, 캘린더 `is_primary`·`access_role`, 계정 `last_synced_at`·`last_error`·`sync_started_at`(잠금), Vault 토큰 함수, pg_cron 15분 |
+| `supabase/functions/gcal-sync/`, `_shared/google.ts` | 동기화 본체. `--use-api --no-verify-jwt`로 배포(사용자 JWT·`x-cron-secret`을 함수가 직접 확인) |
+| `src/app/api/google/{start,callback,disconnect}` | OAuth 시작·콜백(토큰 교환 → Vault 저장 → 캘린더 목록), 해제(토큰 폐기 → 일정 남기기/지우기) |
+| `src/lib/google/server.ts`, `src/lib/data/google.ts`, `src/lib/hooks/use-google.ts` | 서버 헬퍼, 데이터 계층, 훅(`kickGoogleSync`) |
+
+문서와 달라진 점
+- **대기열 대신 표시 컬럼**: `gcal_outbox` 대신 `events.google_dirty`. 트리거가 사용자(authenticated)의 구글 일정 변경만 표시하고, service role인 동기화가 쓴 변경은 표시하지 않는다. 01의 `useSaveEvent`·`useDeleteEvent`가 성공하면 `kickGoogleSync`로 바로 동기화한다(1분 대기열 cron 없음).
+- **singleEvents=false**: 반복 원본은 `rrule`·`exdates`, 회차 수정은 예외 일정(`recurrence_parent_id`·`original_date`), 취소된 회차는 원본 `exdates`로 넣는다. 여기서 만든 예외 일정은 구글에 반복 없는 단독 일정으로 보낸다.
+- **리디렉션 URI**: main 개발 서버 기준 `http://localhost:3000/api/google/callback`.
+- 새 캘린더는 기본 캘린더만 켜지고, 읽기 전용 캘린더는 "가져오기만"이다. 저장 위치가 없는 새 구글 일정은 기본 캘린더로 보낸다(GCAL-06 캘린더 선택 UI는 아직 없음).
+- 주기 호출 주소·비밀값은 Vault(`gcal_sync_url`, `gcal_cron_secret`)와 함수 비밀값 `CRON_SECRET`에 있다. 다시 만들려면 `set_gcal_cron_config(url, secret)`(service role)을 부르고 `npx supabase secrets set CRON_SECRET=…`.

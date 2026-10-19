@@ -1,5 +1,4 @@
 // 할일 데이터 계층. 조회 함수 시그니처는 공유 계약이므로 바꾸지 않는다.
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_TZ, zonedParts, zonedToUtc } from "@/lib/date";
 import { createClient } from "@/lib/supabase/client";
 import type { Tables, TablesInsert } from "@/lib/supabase/database.types";
@@ -136,12 +135,11 @@ export async function deleteTodo(id: string) {
 
 /**
  * 완료·완료 취소(DB 함수 complete_todo). 반복 할일이면 같은 트랜잭션에서 다음 회차가 생긴다.
- * TODO(02): database.types.ts를 다시 만들면(complete_todo 포함) 아래 캐스팅을 지운다.
  */
 export async function completeTodo(id: string, done = true, tz: string = DEFAULT_TZ): Promise<CompleteTodoResult> {
-  const { data, error } = await (createClient() as unknown as SupabaseClient).rpc("complete_todo", { p_id: id, p_done: done });
+  const { data, error } = await createClient().rpc("complete_todo", { p_id: id, p_done: done });
   if (error) throw error;
-  const result = data as { todo: TodoRow; next: TodoRow | null };
+  const result = data as unknown as { todo: TodoRow; next: TodoRow | null }; // 반환형이 jsonb라 행 모양을 지정한다
   return { todo: toTodo(result.todo, tz), next: result.next ? toTodo(result.next, tz) : null };
 }
 

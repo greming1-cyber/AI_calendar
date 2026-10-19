@@ -18,7 +18,7 @@ npm run lint     # ESLint
 
 ## 현재 상태
 
-M0 기반(세션 00) 완료: 로그인과 Supabase 실데이터 구조가 들어갔다. 일정·할일·가계부 화면은 DB에서 **읽어서** 보여 주고, 쓰기는 최소 구현(일정 저장·삭제, 할일 완료 토글)만 있다. 날씨·구글·MCP는 아직 `mock-data.ts` 예시다.
+세션 00(기반)·01(일정)·02(할일) 병합, 04의 구글 캘린더 동기화 구현(Supabase 클라우드 `fjnomlibtgpamjkbulif`에 연결). 가계부는 조회 위주이고, 날씨·MCP는 아직 `mock-data.ts` 예시다. 구글 동기화 구조는 `docs/sessions/04-integrations.md` 10절(`google_dirty` 표시 → Edge Function `gcal-sync`, 15분 pg_cron).
 
 - `src/app/` — 라우트 `/`(홈), `/calendar`, `/todos`, `/money`, `/settings`. 각 `page.tsx`는 `src/components/<화면>/`의 클라이언트 컴포넌트만 렌더링한다. `(auth)/`는 `/login`, `/signup`, `/reset-password`, `/update-password`, `/auth/callback`(이메일 인증·구글 로그인·재설정 링크 처리).
 - `src/app/layout.tsx` → `providers.tsx`(TanStack Query, 토스트) → `components/shell/AppShell.tsx`(사이드바·헤더). AppShell은 화면 본문을 **브라우저에서만** 그린다. `cacheComponents`가 클라이언트 컴포넌트도 서버에서 미리 렌더하는데, 화면들이 현재 시각과 쿼리 상태를 읽기 때문이다. 로그인 화면은 셸 없이 보여 준다.

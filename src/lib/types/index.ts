@@ -3,3 +3,4 @@ export * from "./common";
 export * from "./events";
 export * from "./todos";
 export * from "./money";
+export * from "./google";

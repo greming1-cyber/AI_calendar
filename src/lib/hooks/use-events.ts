@@ -15,6 +15,7 @@ import {
   updateCategory,
 } from "@/lib/data/events";
 import type { CalendarEvent, DateRange, EventCategory, EventInput, RecurrenceScope } from "@/lib/types";
+import { kickGoogleSync } from "./use-google";
 import { useTimezone } from "./use-profile";
 
 // 쿼리 키: 도메인명이 첫 원소. 쓰기 후에는 ["events"] 전체를 무효화한다.
@@ -118,6 +119,10 @@ export function useSaveEvent() {
     },
     onError: (_e, _v, ctx) => restore(qc, ctx?.snapshot),
     onSettled: () => qc.invalidateQueries({ queryKey: eventKeys.all }),
+    // 구글 일정이면 바로 내보낸다(GCAL-05).
+    onSuccess: (_d, { input }) => {
+      if (input.source === "google") kickGoogleSync(qc);
+    },
   });
 }
 
@@ -146,6 +151,8 @@ export function useDeleteEvent() {
     },
     onError: (_e, _v, ctx) => restore(qc, ctx?.snapshot),
     onSettled: () => qc.invalidateQueries({ queryKey: eventKeys.all }),
+    // 구글 일정 삭제는 소프트 삭제로 남아 있다가 동기화가 구글에서 지운다(GCAL-05).
+    onSuccess: () => kickGoogleSync(qc),
   });
 }
 
