@@ -108,7 +108,7 @@ npm run dev -- -p 3004
 - [ ] `useWeather({ date? })`: 사용자 기본 위치 기준. 01·06이 쓴다.
   - 날짜를 주면 그날의 일별·시간별 예보를, 없으면 현재와 오늘을 반환한다.
 - [ ] `useGoogleStatus()`: 홈의 "Google 동기화 · n분 전"용. 연결 여부, 마지막 동기화 시각, 재연결 필요 여부를 준다.
-- [ ] `useGoogleCalendars()`: 일정 저장 위치 선택용(GCAL-06).
+- [x] `useGoogleCalendars()`: 일정 저장 위치 선택용(GCAL-06).
 - [ ] `GoogleTab`
   - 연결 버튼, 계정 이메일, 마지막 동기화, 지금 동기화, 연결 해제
   - 캘린더별 동기화 스위치, 동기화 방향
@@ -165,5 +165,6 @@ Google·기상청 키는 내가 준비해서 알려줄게. 날씨(5.3)부터 시
 - **대기열 대신 표시 컬럼**: `gcal_outbox` 대신 `events.google_dirty`. 트리거가 사용자(authenticated)의 구글 일정 변경만 표시하고, service role인 동기화가 쓴 변경은 표시하지 않는다. 01의 `useSaveEvent`·`useDeleteEvent`가 성공하면 `kickGoogleSync`로 바로 동기화한다(1분 대기열 cron 없음).
 - **singleEvents=false**: 반복 원본은 `rrule`·`exdates`, 회차 수정은 예외 일정(`recurrence_parent_id`·`original_date`), 취소된 회차는 원본 `exdates`로 넣는다. 여기서 만든 예외 일정은 구글에 반복 없는 단독 일정으로 보낸다.
 - **리디렉션 URI**: main 개발 서버 기준 `http://localhost:3000/api/google/callback`.
-- 새 캘린더는 기본 캘린더만 켜지고, 읽기 전용 캘린더는 "가져오기만"이다. 저장 위치가 없는 새 구글 일정은 기본 캘린더로 보낸다(GCAL-06 캘린더 선택 UI는 아직 없음).
+- 새 캘린더는 기본 캘린더만 켜지고, 읽기 전용 캘린더는 "가져오기만"이다. 저장 위치가 없는 새 구글 일정은 기본 캘린더로 보낸다.
 - 주기 호출 주소·비밀값은 Vault(`gcal_sync_url`, `gcal_cron_secret`)와 함수 비밀값 `CRON_SECRET`에 있다. 다시 만들려면 `set_gcal_cron_config(url, secret)`(service role)을 부르고 `npx supabase secrets set CRON_SECRET=…`.
+- **GCAL-06·07 (2026-10-19, `feat/gcal-picker`)**: 일정 모달에서 저장 위치가 구글이면 내보낼 수 있는 캘린더(쓰기 가능·켜짐·가져오기 전용 아님)를 고른다. 기본값은 기본 캘린더이고 `EventInput.googleCalendarId` → `events.google_calendar_id`로 저장한다. 수정할 때는 보여 주기만 한다(캘린더 이동은 미지원). 반복 일정을 "이 일정만/이후 모두"로 고쳐 새로 생기는 행은 원본의 캘린더를 물려받는다. 캘린더 화면의 구글 일정은 `google_calendars.color`로 칠한다.

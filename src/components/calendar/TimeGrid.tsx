@@ -44,7 +44,7 @@ export function TimeGrid({
   selected: ISODate;
   /** 지금 시각(분). 오늘 칸에 선을 긋는다 */
   nowMinute: number;
-  color: (category: string) => string;
+  color: (e: CalendarEvent) => string;
   /** 종일 띠에 덧붙일 칩(할일·고정지출) */
   extras?: (date: ISODate) => ReactNode;
   onSelectDate: (date: ISODate) => void;
@@ -128,8 +128,8 @@ export function TimeGrid({
           ...style,
           top: (s / 60) * HOUR,
           height: Math.max(((en - s) / 60) * HOUR - 2, 14),
-          background: `color-mix(in oklch, ${color(e.category)} 42%, #1c1a18)`,
-          borderColor: color(e.category),
+          background: `color-mix(in oklch, ${color(e)} 42%, #1c1a18)`,
+          borderColor: color(e),
           opacity: dragging ? 0.35 : 1,
         }}
       >
@@ -200,7 +200,7 @@ export function TimeGrid({
                   type="button"
                   onClick={() => onOpen(e)}
                   className="truncate rounded-[5px] px-1.5 py-0.5 text-left text-[11px] text-fg"
-                  style={{ background: `color-mix(in oklch, ${color(e.category)} 45%, #1c1a18)` }}
+                  style={{ background: `color-mix(in oklch, ${color(e)} 45%, #1c1a18)` }}
                 >
                   {e.source === "google" ? "G · " : ""}
                   {e.title}

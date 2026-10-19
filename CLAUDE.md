@@ -21,7 +21,7 @@ npm run lint     # ESLint
 세션 00(기반)·01(일정)·02(할일) 병합, 04의 구글 캘린더 동기화 구현(Supabase 클라우드 `fjnomlibtgpamjkbulif`에 연결). 가계부는 조회 위주이고, 날씨·MCP는 아직 `mock-data.ts` 예시다. 구글 동기화 구조는 `docs/sessions/04-integrations.md` 10절(`google_dirty` 표시 → Edge Function `gcal-sync`, 15분 pg_cron).
 
 - `src/app/` — 라우트 `/`(홈), `/calendar`, `/todos`, `/money`, `/settings`. 각 `page.tsx`는 `src/components/<화면>/`의 클라이언트 컴포넌트만 렌더링한다. `(auth)/`는 `/login`, `/signup`, `/reset-password`, `/update-password`, `/auth/callback`(이메일 인증·구글 로그인·재설정 링크 처리).
-- `src/app/layout.tsx` → `providers.tsx`(TanStack Query, 토스트) → `components/shell/AppShell.tsx`(사이드바·헤더). AppShell은 화면 본문을 **브라우저에서만** 그린다. `cacheComponents`가 클라이언트 컴포넌트도 서버에서 미리 렌더하는데, 화면들이 현재 시각과 쿼리 상태를 읽기 때문이다. 로그인 화면은 셸 없이 보여 준다.
+- `src/app/layout.tsx` → `providers.tsx`(TanStack Query, 토스트) → `components/shell/AppShell.tsx`(사이드바·헤더). 화면 본문은 각 `page.tsx`가 `components/shell/Screen.tsx`로 감싸 **브라우저에서만** 그린다. `cacheComponents`가 클라이언트 컴포넌트도 서버에서 미리 렌더하는데, 화면들이 현재 시각과 쿼리 상태를 읽기 때문이다. 이 게이트를 AppShell(레이아웃)에 두면 페이지 세그먼트가 렌더되지 않아 instant navigation 검증 경고("Dropped segment")가 나므로, 새 화면도 `page.tsx` 안에서 `Screen`으로 감싼다. 로그인 화면은 셸 없이 보여 준다.
 - `src/proxy.ts` — 요청마다 세션 쿠키를 갱신하고 미로그인 사용자를 `/login?next=…`로 보낸다(Next 16의 middleware 대체). 환경변수가 없으면 인증 없이 통과한다.
 - `src/lib/supabase/` — `client.ts`(브라우저), `server.ts`(서버 컴포넌트·라우트 핸들러, `cookies()` 사용), `admin.ts`(service role, 서버 전용), `account-actions.ts`(회원 탈퇴 서버 액션), `database.types.ts`(DB 타입).
 - **데이터 계층**: 화면 → `src/lib/hooks/use-<도메인>.ts`(TanStack Query 훅) → `src/lib/data/<도메인>.ts`(Supabase 쿼리, DB 행 ↔ 화면 타입 변환 `toEvent` 등) → Supabase(RLS).

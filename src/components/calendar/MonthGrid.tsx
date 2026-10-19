@@ -27,7 +27,7 @@ export function MonthGrid({
   today: ISODate;
   selected: ISODate;
   weather: (date: ISODate) => string | undefined;
-  color: (category: string) => string;
+  color: (e: CalendarEvent) => string;
   /** 일정 뒤에 붙일 칩(할일·고정지출) */
   markers: (date: ISODate) => ReactNode[];
   onSelect: (date: ISODate) => void;
@@ -59,7 +59,7 @@ export function MonthGrid({
                 }}
                 onDoubleClick={(ev) => ev.stopPropagation()}
                 className="truncate rounded-[5px] px-1 py-0.5 text-left text-[10px] text-fg sm:px-1.5 sm:text-[11px]"
-                style={{ background: `color-mix(in oklch, ${color(e.category)} 45%, #1c1a18)` }}
+                style={{ background: `color-mix(in oklch, ${color(e)} 45%, #1c1a18)` }}
                 title={`${e.allDay ? "종일" : e.start} ${e.title}`}
               >
                 {e.source === "google" ? "G · " : ""}
