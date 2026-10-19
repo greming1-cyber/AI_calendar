@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // life-manager-mcp — 라이프 매니저 로컬 stdio MCP 서버.
 // DB에 직접 붙지 않고 LIFE_API_URL(Edge Function mcp-api)에 LIFE_TOKEN(PAT)으로만 요청한다.
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+// 도구 정의는 원격 MCP(mcp-remote)와 같은 supabase/functions/_shared/life/defs.ts를 빌드 때 복사해 쓴다.
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { TOOLS } from "./tools.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { TOOL_DEFS, toolResultText } from "./generated/defs.js";
 
 const API_URL = process.env.LIFE_API_URL?.trim();
 const TOKEN = process.env.LIFE_TOKEN?.trim();
@@ -36,15 +38,6 @@ interface ApiResponse {
   candidates?: string[];
 }
 
-const HINTS: Record<string, string> = {
-  UNAUTHORIZED: "토큰이 잘못됐거나 폐기됐습니다. 사용자에게 설정 → MCP 연결에서 새 토큰을 발급해 LIFE_TOKEN을 바꾸라고 안내하세요.",
-  FORBIDDEN_SCOPE: "이 토큰에 권한이 없습니다. 다른 방법으로 시도하지 말고 사용자에게 권한이 필요하다고 알리세요.",
-  NOT_FOUND: "대상을 찾지 못했습니다.",
-  VALIDATION: "인자를 고쳐 다시 시도하세요.",
-  CONFLICT: "같은 항목이 이미 있습니다.",
-  UPSTREAM: "서버 또는 외부 서비스 문제입니다.",
-};
-
 async function call(tool: string, args: unknown): Promise<ApiResponse> {
   try {
     const res = await fetch(API_URL!, {
@@ -64,32 +57,25 @@ async function call(tool: string, args: unknown): Promise<ApiResponse> {
   }
 }
 
-const header = (r: ApiResponse) => (r.now ? `now: ${r.now} (${r.timezone ?? "Asia/Seoul"})\n` : "");
+const server = new Server({ name: "life-manager", version: "0.2.0" }, { capabilities: { tools: {} } });
 
-const server = new McpServer({ name: "life-manager", version: "0.1.0" });
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: TOOL_DEFS.map((t) => ({
+    name: t.name,
+    title: t.title,
+    description: t.description,
+    inputSchema: t.inputSchema,
+    annotations: { title: t.title, readOnlyHint: !t.write, destructiveHint: Boolean(t.destructive), openWorldHint: false },
+  })),
+}));
 
-for (const t of TOOLS) {
-  server.registerTool(
-    t.name,
-    {
-      title: t.title,
-      description: t.description,
-      inputSchema: t.input,
-      annotations: { readOnlyHint: Boolean(t.readOnly), destructiveHint: Boolean(t.destructive), openWorldHint: false },
-    },
-    async (args: unknown) => {
-      const r = await call(t.name, args);
-      if (r.ok) {
-        return { content: [{ type: "text" as const, text: `${header(r)}${JSON.stringify(r.data, null, 2)}` }] };
-      }
-      const lines = [`오류 ${r.code ?? "UPSTREAM"}: ${r.message ?? "알 수 없는 오류"}`];
-      if (r.candidates?.length) lines.push(`다음 중 하나로 다시 시도: ${r.candidates.join(", ")}`);
-      const hint = r.code && HINTS[r.code];
-      if (hint) lines.push(hint);
-      return { isError: true, content: [{ type: "text" as const, text: `${header(r)}${lines.join("\n")}` }] };
-    },
-  );
-}
+server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  if (!TOOL_DEFS.some((t) => t.name === req.params.name)) {
+    return { isError: true, content: [{ type: "text" as const, text: `알 수 없는 도구입니다: ${req.params.name}` }] };
+  }
+  const r = toolResultText(await call(req.params.name, req.params.arguments));
+  return { isError: r.isError, content: [{ type: "text" as const, text: r.text }] };
+});
 
 await server.connect(new StdioServerTransport());
-console.error(`life-manager-mcp 실행 중 (도구 ${TOOLS.length}개)`);
+console.error(`life-manager-mcp 실행 중 (도구 ${TOOL_DEFS.length}개)`);
