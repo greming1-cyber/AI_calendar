@@ -2,7 +2,7 @@
 // 변환·수정 규칙은 웹 앱 src/lib/data/events.ts(세션 01)와 같다. 그쪽이 바뀌면 여기도 맞춘다.
 // 구글 일정(source='google')을 쓰면 google_dirty=true로 표시한다. service role 쓰기에는 DB 트리거가 표시하지 않기 때문이다.
 // 내보내기는 gcal-sync 15분 주기 실행이 처리한다(즉시 반영 안 됨).
-import { RRuleError, describeRRule, expandRRule, parseRRule, splitRRule } from "../../../src/lib/rrule.ts";
+import { RRuleError, describeRRule, expandRRule, parseRRule, splitRRule } from "../../../../src/lib/rrule.ts";
 import {
   ApiError,
   type Args,
