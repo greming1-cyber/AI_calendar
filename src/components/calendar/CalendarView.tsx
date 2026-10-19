@@ -9,8 +9,9 @@ import { useGoogleCalendars } from "@/lib/hooks/use-google";
 import { useProfile, useTimezone } from "@/lib/hooks/use-profile";
 import { useToday } from "@/lib/hooks/use-today";
 import { useTodos } from "@/lib/hooks/use-todos";
-import { OUTDOOR_CATEGORIES, PROFILE, dailyWeather } from "@/lib/mock-data";
+import { useWeather } from "@/lib/hooks/use-weather";
 import type { CalendarEvent, EventInput, ISODate, RecurrenceScope } from "@/lib/types";
+import { dayLabel, highLow, rainAlertsFor, shortLabel } from "@/lib/weather";
 import { CategoryPanel } from "./CategoryPanel";
 import { EventModal } from "./EventModal";
 import { MonthGrid } from "./MonthGrid";
@@ -24,7 +25,6 @@ const VIEWS = [
   { value: "day", label: "일" },
 ] as const;
 
-const RAIN_ALERT = 60;
 const VIEW_KEY = "calendar:view";
 const TODOS_KEY = "calendar:show-todos";
 const FIXED_KEY = "calendar:show-fixed";
@@ -126,8 +126,8 @@ export function CalendarView() {
   // GCAL-07: 구글 일정은 저장 캘린더 색, 그 밖에는 카테고리 색
   const color = (e: CalendarEvent) =>
     (e.source === "google" && googleCalendars.find((c) => c.id === e.googleCalendarId)?.color) || categoryColorOf(categories, e.category);
-  // TODO(04): useWeather()로 바꾼다. 지금은 예시 예보다.
-  const weather = dailyWeather(todayIso);
+  // WTH-05: 날짜별 예보(예보 기간 밖이면 없음)
+  const { daily, label: wxLabel } = useWeather();
 
   const todosOn = (date: ISODate) => (showTodos ? (todosQuery.data ?? []).filter((t) => t.dueDate === date) : []);
   const paymentsOn = (date: ISODate) => (showFixed ? (paymentsQuery.data ?? []).filter((p) => p.date === date) : []);
@@ -199,8 +199,8 @@ export function CalendarView() {
   };
 
   const selEvents = eventsOn(events, selected);
-  const selWx = weather[selected];
-  const rainAlert = selWx && selWx.rainChance >= RAIN_ALERT && selEvents.some((e) => OUTDOOR_CATEGORIES.includes(e.category));
+  const selWx = daily.find((d) => d.date === selected);
+  const rainAlert = rainAlertsFor(selected, daily, selEvents);
   const { y, m } = parts(anchor);
   const days = view === "day" ? [anchor] : Array.from({ length: 7 }, (_, i) => addDays(range.from, i));
 
@@ -230,7 +230,10 @@ export function CalendarView() {
         events={events}
         today={todayIso}
         selected={selected}
-        weather={(d) => weather[d]?.label}
+        weather={(d) => {
+          const day = daily.find((w) => w.date === d);
+          return day ? dayLabel(day) : undefined;
+        }}
         color={color}
         markers={markers}
         onSelect={select}
@@ -315,7 +318,7 @@ export function CalendarView() {
         <section className="card card-warm gap-3 p-5">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-xl font-bold">{longLabel(selected)}</span>
-            <span className="text-xs text-muted">{selWx ? `${PROFILE.regionShort} ${selWx.label}` : "예보 기간 밖"}</span>
+            <span className="text-xs text-muted">{selWx ? `${shortLabel(wxLabel)} ${selWx.summary} ${highLow(selWx)}` : "예보 기간 밖"}</span>
           </div>
           {eventsQuery.isSuccess && !selEvents.length && <span className="py-3 text-[13px] text-subtle">등록된 일정이 없어요.</span>}
           {selEvents.map((e) => (
@@ -350,7 +353,7 @@ export function CalendarView() {
           ))}
           {rainAlert && (
             <div className="rounded-[10px] bg-[oklch(0.35_0.06_240/.5)] px-3 py-2.5 text-xs">
-              야외 일정이 있는 날 비 예보(강수 {selWx.rainChance}%)가 있어요.
+              야외 일정이 있는 날 비 예보(강수 {rainAlert.rainChance}%)가 있어요.
             </div>
           )}
         </section>

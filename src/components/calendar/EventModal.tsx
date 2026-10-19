@@ -8,8 +8,9 @@ import { useDeleteEvent, useEventCategories, useLinkedItems, useSaveEvent } from
 import { useGoogleCalendars, useGoogleStatus } from "@/lib/hooks/use-google";
 import { useProfile, useTimezone } from "@/lib/hooks/use-profile";
 import { useToday } from "@/lib/hooks/use-today";
-import { dailyWeather } from "@/lib/mock-data";
+import { useWeather } from "@/lib/hooks/use-weather";
 import { REMINDER_OPTIONS, type CalendarEvent, type EventInput, type ISODate, type RecurrenceScope } from "@/lib/types";
+import { highLow, summaryOf } from "@/lib/weather";
 import { RepeatEditor, emptyRepeat, repeatFromRRule, repeatToRRule, type RepeatState } from "./RepeatEditor";
 import { ScopeChooser } from "./ScopeChooser";
 
@@ -355,7 +356,7 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
         <textarea value={f.memo} onChange={(e) => set("memo", e.target.value)} rows={3} placeholder="메모" className="field resize-y" />
       </label>
 
-      {event && <EventLinks event={event} today={today} />}
+      {event && <EventLinks event={event} />}
 
       {pending && (
         <ScopeChooser
@@ -370,10 +371,12 @@ function EventForm({ onClose, initial, event, dayEvents = [], onPick }: EventMod
 }
 
 /** EVT-07: 일정에 연결된 할일·지출과 그날 날씨 */
-function EventLinks({ event, today }: { event: CalendarEvent; today: ISODate }) {
+function EventLinks({ event }: { event: CalendarEvent }) {
   const linked = useLinkedItems(event.id);
-  // TODO(04): useWeather(date)로 바꾼다. 지금은 예시 예보다.
-  const weather = dailyWeather(today)[event.date];
+  // WTH-06: 그날 예보. 시간 일정이면 시작 시각에 가장 가까운(이전) 시간별 예보를 쓴다.
+  const { day, hourly } = useWeather({ date: event.date });
+  const startHour = !event.allDay && event.start ? event.start.slice(0, 2) : "";
+  const slot = startHour ? (hourly.filter((h) => h.hour <= startHour).at(-1) ?? hourly[0]) : undefined;
   const todos = linked.data?.todos ?? [];
   const txs = linked.data?.transactions ?? [];
 
@@ -381,7 +384,13 @@ function EventLinks({ event, today }: { event: CalendarEvent; today: ISODate }) 
     <section aria-label="연결된 항목" className="flex flex-col gap-2 border-t border-line pt-3 text-[13px]">
       <div className="flex items-center justify-between text-xs text-muted">
         <span>연결된 항목</span>
-        <span>{weather ? `날씨 ${weather.label} · 강수 ${weather.rainChance}%` : "날씨: 예보 기간 밖"}</span>
+        <span>
+          {slot
+            ? `날씨 ${slot.hour}시 ${summaryOf(slot.sky, slot.precipType)} ${slot.temp}° · 강수 ${slot.rainChance}%`
+            : day
+              ? `날씨 ${day.summary} ${highLow(day)} · 강수 ${day.rainChance}%`
+              : "날씨: 예보 기간 밖"}
+        </span>
       </div>
       {linked.isPending && <span className="text-xs text-subtle">불러오는 중…</span>}
       {linked.isError && <span className="text-xs text-danger">연결된 항목을 불러오지 못했어요.</span>}

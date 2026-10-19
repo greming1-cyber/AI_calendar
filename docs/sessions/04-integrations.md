@@ -90,32 +90,32 @@ npm run dev -- -p 3004
 - [ ] `npx supabase functions deploy gcal-sync`
 
 ### 5.3 날씨 — Edge Function `weather` (WTH-01~09)
-- [ ] 입력은 `{ lat, lon }` 또는 `{ nx, ny }`다. `kma-grid`로 격자로 바꾼다(기상청 LCC 변환 공식).
-- [ ] 기상청 API 호출
+- [x] 입력은 `{ lat, lon }` 또는 `{ nx, ny }`다. `kma-grid`로 격자로 바꾼다(기상청 LCC 변환 공식).
+- [x] 기상청 API 호출
   - 초단기실황(현재)
   - 단기예보(오늘~모레, 발표시각 02·05·08…시 규칙 처리)
   - 중기 기온·육상예보(3~10일, 지역 코드 매핑)
-- [ ] 표준 응답 형식을 정하고 `src/lib/types/weather.ts`에 둔다.
+- [x] 표준 응답 형식을 정하고 `src/lib/types/weather.ts`에 둔다.
   ```ts
   { updatedAt, current: { temp, feelsLike, sky, precipType, humidity, wind },
     hourly: { time, temp, sky, rainChance }[], daily: { date, high, low, sky, rainChance }[] }
   ```
-- [ ] `weather_cache` 캐시: 현재·단기 30분, 중기 6시간. API가 실패하면 **만료된 캐시라도** `stale: true`와 함께 반환한다.
+- [x] `weather_cache` 캐시: 현재·단기 30분, 중기 6시간. API가 실패하면 **만료된 캐시라도** `stale: true`와 함께 반환한다.
 - [ ] (P2) 미세먼지: 에어코리아 API, 별도 인증키
 - [ ] `npx supabase functions deploy weather`
 
 ### 5.4 훅과 설정 화면
-- [ ] `useWeather({ date? })`: 사용자 기본 위치 기준. 01·06이 쓴다.
+- [x] `useWeather({ date? })`: 사용자 기본 위치 기준. 01·06이 쓴다.
   - 날짜를 주면 그날의 일별·시간별 예보를, 없으면 현재와 오늘을 반환한다.
 - [ ] `useGoogleStatus()`: 홈의 "Google 동기화 · n분 전"용. 연결 여부, 마지막 동기화 시각, 재연결 필요 여부를 준다.
 - [x] `useGoogleCalendars()`: 일정 저장 위치 선택용(GCAL-06).
 - [ ] `GoogleTab`
   - 연결 버튼, 계정 이메일, 마지막 동기화, 지금 동기화, 연결 해제
   - 캘린더별 동기화 스위치, 동기화 방향
-- [ ] `WeatherTab`
+- [x] `WeatherTab` (온도 단위·아이콘·미세먼지 설정은 저장 컬럼이 없어 화면만 있음)
   - 현재 위치 사용(브라우저 위치 → 격자로 저장, 위경도 원본은 저장하지 않음)
   - 지역 검색·변경(`regions.json`), 온도 단위, 캘린더 날씨 아이콘·미세먼지 표시 설정
-- [ ] (WTH-07 판단 로직) `rainAlertsFor(date)` 함수를 제공한다. 실제 알림 발송은 06이 한다.
+- [x] (WTH-07 판단 로직) `rainAlertsFor(date)` 함수를 제공한다. 실제 알림 발송은 06이 한다.
 
 ## 6. 다른 세션과의 계약
 
@@ -168,3 +168,23 @@ Google·기상청 키는 내가 준비해서 알려줄게. 날씨(5.3)부터 시
 - 새 캘린더는 기본 캘린더만 켜지고, 읽기 전용 캘린더는 "가져오기만"이다. 저장 위치가 없는 새 구글 일정은 기본 캘린더로 보낸다.
 - 주기 호출 주소·비밀값은 Vault(`gcal_sync_url`, `gcal_cron_secret`)와 함수 비밀값 `CRON_SECRET`에 있다. 다시 만들려면 `set_gcal_cron_config(url, secret)`(service role)을 부르고 `npx supabase secrets set CRON_SECRET=…`.
 - **GCAL-06·07 (2026-10-19, `feat/gcal-picker`)**: 일정 모달에서 저장 위치가 구글이면 내보낼 수 있는 캘린더(쓰기 가능·켜짐·가져오기 전용 아님)를 고른다. 기본값은 기본 캘린더이고 `EventInput.googleCalendarId` → `events.google_calendar_id`로 저장한다. 수정할 때는 보여 주기만 한다(캘린더 이동은 미지원). 반복 일정을 "이 일정만/이후 모두"로 고쳐 새로 생기는 행은 원본의 캘린더를 물려받는다. 캘린더 화면의 구글 일정은 `google_calendars.color`로 칠한다.
+
+## 11. 구현 기록 — 날씨 (2026-10-19, `feat/weather`)
+
+구현: 5.3 Edge Function `weather`, 5.4 `useWeather`·`WeatherTab`·`rainAlertsFor`, 캘린더·일정 상세·홈의 예시 날씨 교체, `mock-data.ts` 삭제. 미세먼지(WTH-08)는 아직이다.
+
+| 파일 | 내용 |
+|---|---|
+| `supabase/functions/_shared/kma.ts` | 기상청 호출(초단기실황·단기예보·중기 기온/육상), 발표시각 규칙, 해석, `weather_cache` 캐시, 보고서 조립 `getWeatherReport`. mcp-api도 import 해서 쓸 수 있다 |
+| `supabase/functions/_shared/kma-regions.ts` | 중기기온 구역 170개(활용가이드 2025.12, 남한·산악/해상 지점 제외)와 소속 육상 구역 |
+| `supabase/functions/weather/index.ts` | 사용자 JWT 확인(`--no-verify-jwt` 배포), 입력 `{}`(기본 위치)·`{lat,lon}`·`{nx,ny}` |
+| `src/lib/types/weather.ts`, `src/lib/kma-grid.ts`, `src/lib/regions.json` | 표준 응답 타입, 격자 변환, 시/군/구 252개(기상청 격자 엑셀 2024-10 기준, 중기 구역 코드 포함) |
+| `src/lib/data/weather.ts`, `src/lib/hooks/use-weather.ts`, `src/lib/weather.ts` | 함수 호출·기본 위치 저장, 훅, 표시·판단 도우미(`dayLabel`, `rainAlertsFor` 등) |
+
+문서와 달라진 점
+- 단기예보는 지금 오늘~4일 뒤까지 나온다. 시간 자료가 6개 미만인 마지막 날은 일별에서 빼고 중기예보로 채운다. 중기는 필드(`taMax3`~`10`, `wf3Am` …)가 있는 날만 읽는다(기상청 개편 대비).
+- 응답에 `stale`(만료 캐시 사용)과 `missing`(받지 못한 부분)을 넣었다. 중기가 실패하면 일별은 단기 범위까지만 나온다.
+- 기본 위치가 없으면 서울시청 격자(60,127)를 쓰고 `location.isDefault=true`.
+- `profiles.weather_location`에 `midTa`·`midLand`(선택)를 더했다. 현재 위치는 격자 중심 좌표로 바꿔 저장하고 가장 가까운 시/군/구의 중기 구역을 붙인다.
+- 비 예보 알림 대상 카테고리(`OUTDOOR_CATEGORIES`)는 `src/lib/weather.ts`로 옮겼다.
+- `regions.json`은 2026-07 인천 구 개편·화성시 일반구 신설을 반영하지 않은 자료다.

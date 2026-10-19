@@ -10,9 +10,10 @@ import { useGoogleStatus } from "@/lib/hooks/use-google";
 import { useToday } from "@/lib/hooks/use-today";
 import { useProjects, useTodos, useToggleTodo } from "@/lib/hooks/use-todos";
 import { useBudgets, useTransactions } from "@/lib/hooks/use-transactions";
-import { CURRENT_WEATHER, PROFILE } from "@/lib/mock-data";
+import { useWeather } from "@/lib/hooks/use-weather";
 import { BUDGET_WARN, budgetStatus, dailyExpense, monthTotals, recentDays } from "@/lib/money";
 import { dueLabel, isOverdue, projectProgress } from "@/lib/todo";
+import { highLow, shortLabel, summaryOf } from "@/lib/weather";
 import { HeroBackground, HeroControls } from "./HeroBackground";
 
 const ARC = 283; // 반지름 90 반원 길이
@@ -31,6 +32,8 @@ export function HomeDashboard() {
   const txQuery = useTransactions({ from: weekStart < monthStart ? weekStart : monthStart, to: today });
   const budgetsQuery = useBudgets(monthKey(y, m));
   const toggle = useToggleTodo();
+  // HOME-01: 날씨는 홈 전체 로딩을 막지 않는다(실패해도 카드 안에서만 알린다).
+  const weather = useWeather();
   const google = useGoogleStatus().data;
   const googleMeta = !google?.connected
     ? "Google 미연결"
@@ -96,27 +99,8 @@ export function HomeDashboard() {
         <div className="grid auto-rows-[minmax(200px,auto)] grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
           {/* 오늘의 날씨 (HOME-01) */}
           <section className="card card-glass gap-2.5">
-            <CardHead title="오늘의 날씨" meta={`${PROFILE.regionShort} · 강수 ${CURRENT_WEATHER.rainChance}%`} />
-            <div className="flex flex-1 items-end gap-3">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[34px] leading-none font-semibold">{CURRENT_WEATHER.temp}°</span>
-                <span className="text-[11px] whitespace-nowrap text-muted">
-                  {CURRENT_WEATHER.condition} · {CURRENT_WEATHER.high}°/{CURRENT_WEATHER.low}°
-                </span>
-              </div>
-              <div className="flex flex-1 items-end gap-0.5">
-                {CURRENT_WEATHER.hourly.map((h, i) => (
-                  <div key={h.time} className="flex flex-1 flex-col items-center gap-1.5">
-                    <span className="text-[11px]">{h.temp}°</span>
-                    <div
-                      className="w-2 rounded"
-                      style={{ height: (h.temp - 8) * 4, background: i === 2 ? "var(--color-accent)" : "rgb(255 255 255 / .22)" }}
-                    />
-                    <span className="text-[10px] text-subtle">{h.time}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <CardHead title="오늘의 날씨" meta={weatherMeta(weather)} />
+            <WeatherBody weather={weather} />
           </section>
 
           {/* 할일 진행 */}
@@ -250,5 +234,48 @@ export function HomeDashboard() {
         </div>
       </main>
     </>
+  );
+}
+
+type WeatherState = ReturnType<typeof useWeather>;
+
+const weatherMeta = ({ label, day, report }: WeatherState) =>
+  [label ? shortLabel(label) : "", day ? `강수 ${day.rainChance}%` : "", report?.stale ? "최근 자료" : ""].filter(Boolean).join(" · ") || "날씨";
+
+/** HOME-01: 현재 기온·하늘·최고/최저와 3시간 간격 기온 막대 6개 */
+function WeatherBody({ weather }: { weather: WeatherState }) {
+  const { current, day, report, query } = weather;
+  if (!current) {
+    return (
+      <span className="flex flex-1 items-center text-[13px] text-subtle">
+        {query.isPending ? "날씨 불러오는 중…" : "날씨를 불러오지 못했어요."}
+      </span>
+    );
+  }
+  const bars = (report?.hourly ?? []).filter((_, i) => i % 3 === 0).slice(0, 6);
+  const temps = bars.map((h) => h.temp);
+  const min = Math.min(...temps);
+  const span = Math.max(...temps) - min || 1;
+  return (
+    <div className="flex flex-1 items-end gap-3">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[34px] leading-none font-semibold">{Math.round(current.temp)}°</span>
+        <span className="text-[11px] whitespace-nowrap text-muted">
+          {summaryOf(current.sky, current.precipType)} · {highLow(day)}
+        </span>
+      </div>
+      <div className="flex flex-1 items-end gap-0.5">
+        {bars.map((h, i) => (
+          <div key={h.time} className="flex flex-1 flex-col items-center gap-1.5" title={`${h.hour}시 ${summaryOf(h.sky, h.precipType)} · 강수 ${h.rainChance}%`}>
+            <span className="text-[11px]">{h.temp}°</span>
+            <div
+              className="w-2 rounded"
+              style={{ height: 8 + ((h.temp - min) / span) * 32, background: i === 0 ? "var(--color-accent)" : "rgb(255 255 255 / .22)" }}
+            />
+            <span className="text-[10px] text-subtle">{h.hour}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
