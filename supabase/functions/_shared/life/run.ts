@@ -1,5 +1,6 @@
 // 도구 실행 공통: 범위 검사 → 인자 검증·실행 → 쓰기 사용 기록. mcp-api(HTTP JSON)와 mcp-remote(MCP Streamable HTTP)가 함께 쓴다.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { type WeatherDay, type WeatherReport, getWeatherReport, locationFromProfile } from "../kma.ts";
 import { READ_SCOPES, TOOL_DEFS, type ToolDef } from "./defs.ts";
 import { createEvent, deleteEvent, eventsInRange, findFreeTime, listEvents, searchEvents, updateEvent } from "./events.ts";
 import {
@@ -47,19 +48,97 @@ type Run = (ctx: Ctx, args: Args) => Promise<ToolResult>;
 
 // ── 공통 도구 ────────────────────────────────────────────
 
-/** 날씨(04 weather Edge Function)가 아직 없다. 준비되면 여기서 weather 함수를 부른다. TODO(04) */
-function weather(): Promise<ToolResult> {
-  return Promise.reject(new ApiError("UPSTREAM", "날씨 기능은 아직 준비 중입니다. 날씨 정보를 제공할 수 없다고 안내하세요."));
+/** 사용자 설정 위치의 날씨 보고서(세션 04 _shared/kma.ts, 캐시는 weather_cache) */
+async function weatherReport(ctx: Ctx): Promise<WeatherReport> {
+  const key = Deno.env.get("KMA_SERVICE_KEY");
+  if (!key) throw new ApiError("UPSTREAM", "서버에 기상청 키가 설정되지 않아 날씨를 알 수 없습니다.");
+  const { data: profile } = await ctx.db.from("profiles").select("weather_location").eq("user_id", ctx.userId).maybeSingle();
+  const report = await getWeatherReport(ctx.db, locationFromProfile(profile?.weather_location), key);
+  if (!report.current && !report.daily.length) throw new ApiError("UPSTREAM", "기상청 응답을 받지 못했습니다. 잠시 뒤 다시 시도하세요.");
+  return report;
+}
+
+const dayView = (d: WeatherDay) => ({
+  date: d.date,
+  weekday: weekday(d.date),
+  summary: d.summary,
+  high: d.high,
+  low: d.low,
+  rain_chance: d.rainChance,
+  precip: d.precipType,
+});
+
+async function weather(ctx: Ctx, args: Args): Promise<ToolResult> {
+  const day = date(ctx, args, "date");
+  const report = await weatherReport(ctx);
+  const location = {
+    label: report.location.label,
+    note: report.location.isDefault ? "설정에 위치가 없어 서울 기준입니다. 설정 → 날씨에서 위치를 정할 수 있습니다." : undefined,
+  };
+  const requested = str(args, "location", { max: 50 });
+  const locationNote = requested && !report.location.label.includes(requested)
+    ? `다른 지역 조회는 지원하지 않아 설정한 위치(${report.location.label}) 날씨를 알려 드립니다.`
+    : undefined;
+  const meta = { updated_at: report.updatedAt, stale: report.stale || undefined, location_note: locationNote };
+
+  if (!day || day === ctx.today) {
+    const today = report.daily.find((d) => d.date === ctx.today);
+    return {
+      data: {
+        location,
+        current: report.current && {
+          temp: report.current.temp,
+          feels_like: report.current.feelsLike,
+          sky: report.current.sky,
+          precip: report.current.precipType,
+          humidity: report.current.humidity,
+          wind_ms: report.current.wind,
+        },
+        today: today && dayView(today),
+        next_hours: report.hourly.filter((h) => h.date === ctx.today).slice(0, 12).map((h) => ({
+          hour: h.hour,
+          temp: h.temp,
+          sky: h.sky,
+          precip: h.precipType,
+          rain_chance: h.rainChance,
+        })),
+        ...meta,
+      },
+    };
+  }
+  const found = report.daily.find((d) => d.date === day);
+  if (!found) {
+    const range = report.daily.length ? `${report.daily[0].date}~${report.daily.at(-1)!.date}` : "없음";
+    throw new ApiError("NOT_FOUND", `${day} 예보가 없습니다. 예보 가능 기간: ${range}`);
+  }
+  return {
+    data: {
+      location,
+      forecast: dayView(found),
+      hourly: report.hourly.filter((h) => h.date === day).map((h) => ({ hour: h.hour, temp: h.temp, sky: h.sky, rain_chance: h.rainChance })),
+      ...meta,
+    },
+  };
 }
 
 async function todaySummary(ctx: Ctx, args: Args): Promise<ToolResult> {
   const d = date(ctx, args, "date") ?? ctx.today;
   const has = (s: string) => ctx.scopes.has(s);
-  const [events, todos, spending, budget] = await Promise.all([
+  const [events, todos, spending, budget, forecast] = await Promise.all([
     has("events:read") ? eventsInRange(ctx, d, d).then((l) => l.map((x) => x.ev)) : undefined,
     has("todos:read") ? dueTodos(ctx, d) : undefined,
     has("tx:read") ? spendingOn(ctx, d) : undefined,
     has("tx:read") ? budgetFor(ctx, d.slice(0, 7)) : undefined,
+    // 날씨는 실패해도 요약 전체를 막지 않는다.
+    has("weather:read")
+      ? weatherReport(ctx).then(
+          (r) => {
+            const day = r.daily.find((x) => x.date === d);
+            return day ? { location: r.location.label, ...dayView(day) } : "그날 예보가 없습니다.";
+          },
+          (e) => `날씨를 불러오지 못했습니다: ${(e as Error).message}`,
+        )
+      : undefined,
   ]);
   return {
     data: {
@@ -76,7 +155,7 @@ async function todaySummary(ctx: Ctx, args: Args): Promise<ToolResult> {
         transactions: spending.date_transactions,
       },
       budget: budget && budget.has_budget ? { month: budget.month, ...budget.total } : undefined,
-      weather: has("weather:read") ? "날씨 기능 준비 중" : undefined,
+      weather: forecast,
       omitted: READ_SCOPES.filter((s) => !has(s)).map((s) => `${s} 범위가 없어 뺐습니다.`),
     },
   };

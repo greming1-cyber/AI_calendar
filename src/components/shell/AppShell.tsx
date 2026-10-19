@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 
-/** 사이드바·헤더 없이 보여 주는 화면(로그인·가입·재설정) */
-const BARE_PATHS = ["/login", "/signup", "/reset-password", "/update-password"];
+/** 사이드바·헤더 없이 보여 주는 화면(로그인·가입·재설정, MCP 연결 동의) */
+const BARE_PATHS = ["/login", "/signup", "/reset-password", "/update-password", "/oauth"];
 
 /**
  * 앱 공통 셸. 화면 본문은 각 `page.tsx`가 `Screen`으로 감싸 브라우저에서만 그린다(서버 렌더에는 셸과 로딩 표시만 들어간다).
