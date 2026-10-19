@@ -1,6 +1,6 @@
 // 할일 도구: list_todos, create_todo, update_todo, complete_todo, delete_todo
 // 변환 규칙은 웹 앱 src/lib/data/todos.ts(세션 02)와 같다. 우선순위 DB 값 1=높음, 2=보통, 3=낮음.
-import { describeRRule, parseRRule } from "../../../src/lib/rrule.ts";
+import { describeRRule, parseRRule } from "../../../../src/lib/rrule.ts";
 import {
   ApiError,
   type Args,
