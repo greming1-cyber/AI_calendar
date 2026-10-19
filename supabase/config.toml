@@ -421,3 +421,7 @@ verify_jwt = false
 # 세션 05: PAT(Bearer lm_mcp_…)를 함수가 직접 확인한다.
 [functions.mcp-api]
 verify_jwt = false
+
+# 원격 MCP(Streamable HTTP): OAuth 액세스 토큰·PAT를 함수가 직접 확인한다.
+[functions.mcp-remote]
+verify_jwt = false
