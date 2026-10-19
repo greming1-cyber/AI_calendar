@@ -1,8 +1,8 @@
-// 아직 실데이터가 없는 영역(날씨·구글 연동·MCP)의 예시 데이터.
+// 아직 실데이터가 없는 영역(날씨·구글 연동)의 예시 데이터.
 // 일정·할일·가계부는 Supabase에서 읽는다(시안 데이터는 DB 함수 seed_demo로 채운다).
-// TODO(04): 날씨 예시 제거  TODO(05): MCP 예시 제거  TODO(06): 이 파일 삭제
+// TODO(04): 날씨 예시 제거  TODO(06): 이 파일 삭제
 import { addDays } from "./date";
-import type { ISODate, McpLog } from "./types";
+import type { ISODate } from "./types";
 
 export const PROFILE = {
   region: "서울특별시 마포구",
@@ -45,17 +45,3 @@ export const CURRENT_WEATHER = {
     { time: "00", temp: 12 },
   ],
 };
-
-export const MCP_TOKEN = {
-  masked: "lm_mcp_••••••••••••7f3a",
-  issued: "2026-09-30",
-  lastUsed: "어제 12:41",
-};
-
-export const MCP_LOGS: McpLog[] = [
-  { tool: "add_transaction", text: "점심 김밥 4,500원 · 카드", at: "10/14 12:41" },
-  { tool: "add_transaction", text: "저녁 장보기 48,000원 · 카드", at: "10/13 19:20" },
-  { tool: "create_event", text: "금 15:00 주간 정리", at: "10/13 09:05" },
-  { tool: "complete_todo", text: "공과금 납부", at: "10/12 21:30" },
-  { tool: "get_weather", text: "토요일 북한산 · 강수 70%", at: "10/12 20:10" },
-];

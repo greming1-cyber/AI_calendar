@@ -1,0 +1,28 @@
+{
+  "name": "life-manager-mcp",
+  "version": "0.1.0",
+  "description": "라이프 매니저(일정·할일·가계부)를 Claude에서 쓰는 로컬 stdio MCP 서버",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "life-manager-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5"
+  }
+}
