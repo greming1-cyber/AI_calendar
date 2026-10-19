@@ -1,11 +1,21 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createMcpToken, getMcpStatus, listMcpAuditLogs, listMcpTokens, revokeMcpToken, type McpScope } from "@/lib/data/mcp-tokens";
+import {
+  createMcpToken,
+  getMcpStatus,
+  listMcpAuditLogs,
+  listMcpGrants,
+  listMcpTokens,
+  revokeMcpGrant,
+  revokeMcpToken,
+  type McpScope,
+} from "@/lib/data/mcp-tokens";
 
 export const mcpKeys = {
   all: ["mcp"] as const,
   tokens: ["mcp", "tokens"] as const,
+  grants: ["mcp", "grants"] as const,
   logs: (days: number) => ["mcp", "logs", days] as const,
   status: ["mcp", "status"] as const,
 };
@@ -30,6 +40,16 @@ export function useCreateMcpToken() {
     mutationFn: (input: { name: string; scopes: McpScope[] }) => createMcpToken(input),
     onSettled: () => qc.invalidateQueries({ queryKey: mcpKeys.all }),
   });
+}
+
+/** OAuth로 연결된 앱(claude.ai·ChatGPT 등) */
+export function useMcpGrants() {
+  return useQuery({ queryKey: mcpKeys.grants, queryFn: listMcpGrants });
+}
+
+export function useRevokeMcpGrant() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: revokeMcpGrant, onSettled: () => qc.invalidateQueries({ queryKey: mcpKeys.all }) });
 }
 
 export function useRevokeMcpToken() {
