@@ -4,3 +4,4 @@ export * from "./events";
 export * from "./todos";
 export * from "./money";
 export * from "./google";
+export * from "./weather";
