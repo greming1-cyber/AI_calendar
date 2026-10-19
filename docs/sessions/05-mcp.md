@@ -96,7 +96,7 @@ npm run dev -- -p 3005
 - [x] 오류를 Claude가 이해할 수 있는 문장으로 바꾼다. `candidates`가 있으면 "다음 중 하나로 다시 시도: …"처럼 안내한다.
 - [x] 빌드·실행 스크립트: `npm run build`, `npx life-manager-mcp`(bin). 사용법은 `mcp/README.md`에 적는다.
 - [x] Claude Code 등록 예: `claude mcp add life-manager -e LIFE_API_URL=… -e LIFE_TOKEN=… -- node D:/…/mcp/dist/index.js`
-- [ ] (P2, MCP-07) Streamable HTTP 원격 모드 — 별도 단계로 미룬다.
+- [x] (P2, MCP-07) Streamable HTTP 원격 모드 — Edge Function `mcp-remote` + Supabase OAuth 2.1(11절).
 
 ### 5.4 설정 MCP 탭 (MCP-03, 06)
 - [x] 토큰 목록: 이름, 앞뒤 4자리, 범위, 발급일, 마지막 사용, 상태
@@ -148,16 +148,32 @@ docs/sessions/README.md 와 docs/sessions/05-mcp.md 를 읽고 세션 05(MCP 서
 ## 9. 요청 사항
 (다른 세션에 요청할 내용이나 받은 요청을 여기에 적는다)
 
-- 04(날씨): `weather` Edge Function이 생기면 `supabase/functions/mcp-api/index.ts`의 `weather()`와 `get_today_summary`의 날씨 자리를 연결한다. 지금은 "준비 중"(UPSTREAM)을 돌려준다.
-- 06(헤더): "Claude 연결됨" 표시는 `useMcpStatus()`(`src/lib/hooks/use-mcp-tokens.ts`)의 `connected`(유효 토큰이 최근 24시간 안에 쓰임)를 쓴다.
+- 04(날씨): 연결 완료. `get_weather`·`get_today_summary`가 `_shared/kma.ts`의 `getWeatherReport`·`locationFromProfile`을 쓴다(키 `KMA_SERVICE_KEY`).
+- 06(헤더): "Claude 연결됨" 표시는 `useMcpStatus()`(`src/lib/hooks/use-mcp-tokens.ts`)의 `connected`(유효 토큰 또는 OAuth 연결이 최근 24시간 안에 쓰임)를 쓴다.
 
 ## 10. 구현 메모 (세션 05 결과)
 
 - 토큰 발급은 `POST /api/mcp/tokens`(사용자 세션, RLS insert). 원문 `lm_mcp_` + base62 43자(256비트), DB에는 SHA-256 hex와 `lm_mcp_앞4…뒤4`만 둔다. 폐기는 클라이언트가 `revoked_at`을 기록한다. 범위 상수는 `src/app/api/mcp/scopes.ts`.
-- `mcp-api`는 `index.ts`(인증·범위·감사), `events.ts`·`todos.ts`·`money.ts`(도구), `util.ts`(검증·타임존·이름 찾기)로 나뉜다. 반복 펼침은 `src/lib/rrule.ts`를 상대 경로로 import한다.
+- 도구 로직은 `supabase/functions/_shared/life/`에 있다: `defs.ts`(도구 정의 단일 출처), `run.ts`(범위 검사·실행·감사), `auth.ts`(PAT·OAuth), `events.ts`·`todos.ts`·`money.ts`(도구), `util.ts`(검증·타임존·이름 찾기). `mcp-api`·`mcp-remote`가 같은 모듈을 쓰고, `mcp/`는 빌드 때 `defs.ts`를 복사한다. 반복 펼침은 `src/lib/rrule.ts`를 상대 경로로 import한다(`functions deploy --use-api`가 함께 올린다).
 - 응답에는 `now`(예: `2026-10-19T14:03:22+09:00`)와 `timezone`을 함께 준다. 연결 확인용 숨은 도구 `ping`(범위 목록)이 있다.
 - 사용 기록: 쓰기 도구가 실제로 바꾼 경우(삭제 미리보기 제외)와 실패(VALIDATION·NOT_FOUND 제외)를 `mcp_audit_logs`에 남긴다.
 - `complete_todo` DB 함수는 security invoker라, service role로 부르기 전에 할일 소유자를 먼저 확인한다.
 - 구글 일정 쓰기는 service role이라 `mark_google_dirty` 트리거가 표시하지 않으므로 `google_dirty=true`를 직접 넣는다. 구글 반영은 15분 주기 동기화 때 된다(즉시 반영 안 됨).
 - 거래는 `transactions`에 직접 쓴다(`via_mcp=true`, `recurring_id`는 비움). 이름 찾기 규칙은 03의 `findCategoryByName`과 같다(정확히 일치 → 없으면 서로 포함되는 후보, 그것도 없으면 전체).
 - 로컬 시험: Deno로 `mcp-api`를 띄우고(`mcp/README.md` 개발 절) 테스트 계정 `dev+mcp@example.com`, `dev+mcp2@example.com`(격리 확인용)으로 확인했다.
+
+## 11. 원격 MCP (MCP-07, 2026-10-19)
+
+claude.ai·Claude Desktop/모바일(커스텀 커넥터)·ChatGPT(개발자 모드 앱)·Claude Code(`--transport http`)가 인터넷으로 바로 붙는 Streamable HTTP 서버다.
+
+- 주소: `https://<project>.supabase.co/functions/v1/mcp-remote` (Edge Function `mcp-remote`, `verify_jwt = false`). stateless(요청마다 서버 생성, JSON 응답).
+- 인증(사용자 결정: 앱 로그인 기반 정식 OAuth, URL 토큰 방식은 쓰지 않음)
+  - 인가 서버는 **Supabase Auth OAuth 2.1 서버**(대시보드 Authentication → OAuth Server, Authorization Path `/oauth/consent`, 동적 등록 허용). DCR·PKCE·토큰 발급·refresh 회전은 Supabase가 한다.
+  - `mcp-remote`는 리소스 서버: 미인증 요청에 `401` + `WWW-Authenticate: Bearer resource_metadata=".../mcp-remote/.well-known/oauth-protected-resource"`, 같은 함수가 보호 리소스 메타데이터(RFC 9728)를 준다(`scopes_supported: email, offline_access`).
+  - 액세스 토큰은 JWKS(ES256)로 서명·`iss`·만료를 검증하고 `client_id` 클레임이 있어야 한다(앱 로그인 세션 토큰은 거부). 권한은 `mcp_oauth_grants(user_id, client_id).scopes`.
+  - `Authorization: Bearer lm_mcp_…`(PAT)도 받는다(Claude Code 헤더 연결용). 범위·사용 기록은 PAT와 같다.
+- 동의 화면 `/oauth/consent`(셸 없음, 로그인 안 했으면 proxy가 `/login?next=`로 보냈다 돌아옴): 앱 이름·돌아갈 호스트(loopback이면 경고)·계정 표시, 서비스 × 읽기/쓰기 선택 → `mcp_oauth_grants` upsert → `auth.oauth.approveAuthorization`. 이미 동의한 앱이면 Supabase가 준 `redirect_url`로 바로 보낸다.
+- 연결 해제: 설정 MCP 탭 "연결된 앱" → `auth.oauth.revokeGrant({ clientId })`(Supabase 세션·refresh token 무효화) + `revoked_at`. 다음 요청부터 401.
+- 로컬 유지(사용자 결정, Site URL `http://localhost:3000`): 동의 화면은 처음 연결·재연결 때만 필요하다. 그때 이 PC에서 앱이 켜져 있어야 하고 다른 기기에서는 연결을 시작할 수 없다. 연결 뒤 도구 호출·토큰 갱신은 Supabase·`mcp-remote`가 처리하므로 앱이 꺼져 있어도 된다.
+- 마이그레이션 `20261019150000_mcp_oauth_grants.sql`: `mcp_oauth_grants` + `mcp_audit_logs.client_id`.
+- 플랫폼 조건(2026-10 공식 문서 기준): claude.ai 커스텀 커넥터는 Free(1개)~Enterprise. ChatGPT는 웹 전용, 쓰기 가능한 MCP는 Business·Enterprise·Edu(beta)이고 개인 요금제는 읽기 전용일 수 있다. ChatGPT는 API 키·Bearer 헤더 인증을 받지 않는다(OAuth 또는 무인증만).

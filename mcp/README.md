@@ -7,6 +7,10 @@ DB에 직접 붙지 않고 Edge Function `mcp-api`에 개인 액세스 토큰(PA
 Claude ──stdio──> life-manager-mcp ──HTTPS + PAT──> Supabase Edge Function mcp-api ──> Postgres
 ```
 
+> 설치 없이 쓰는 **원격 MCP**도 있다: `https://<project>.supabase.co/functions/v1/mcp-remote`(Streamable HTTP, Supabase OAuth 2.1 로그인 또는 `Authorization: Bearer lm_mcp_…`).
+> claude.ai·Claude Desktop/모바일·ChatGPT·Claude Code(`claude mcp add --transport http …`)에서 쓴다. 연결 방법은 웹 앱 설정 → MCP 연결 → 연결 가이드, 설계는 `docs/sessions/05-mcp.md` 11절.
+> 도구 정의는 원격과 같은 `supabase/functions/_shared/life/defs.ts`이고, `npm run build`가 `src/generated/`로 복사한다.
+
 ## 준비
 
 1. 웹 앱 **설정 → MCP 연결**에서 토큰을 발급한다. 원문(`lm_mcp_…`)은 발급할 때 한 번만 보이니 바로 복사한다.
