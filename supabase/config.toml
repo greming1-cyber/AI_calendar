@@ -425,3 +425,7 @@ verify_jwt = false
 # 원격 MCP(Streamable HTTP): OAuth 액세스 토큰·PAT를 함수가 직접 확인한다.
 [functions.mcp-remote]
 verify_jwt = false
+
+# 세션 04 날씨: 사용자 JWT는 함수가 직접 확인한다.
+[functions.weather]
+verify_jwt = false
